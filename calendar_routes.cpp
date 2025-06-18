@@ -1,39 +1,52 @@
 #include "calendar_routes.h"
 
+void CalendarRoutes::setupRoutes(QHttpServer *server)
+{
+    server->route("/calendar/events/<arg>/<arg>",
+                  QHttpServerRequest::Method::Options,
+                  [](const QString &start, const QString &end, const QHttpServerRequest &req) {
+                      Q_UNUSED(req)
+                      return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
+                  });
+    server->route("/calendar/events/<arg>/<arg>",
+                  QHttpServerRequest::Method::Get,
+                  [](const QString &start, const QString &end, const QHttpServerRequest &req) {
+                      return CalendarRoutes::getEvents(req, start, end);
+                  });
 
-void CalendarRoutes::setupRoutes(QHttpServer* server) {
-    server->route("/calendar/events/<arg>/<arg>", QHttpServerRequest::Method::Options,  [](const QString &start, const QString &end, const QHttpServerRequest &req) {
-        Q_UNUSED(req)
-        return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
-    });
-    server->route("/calendar/events/<arg>/<arg>", QHttpServerRequest::Method::Get, [](const QString &start, const QString &end, const QHttpServerRequest &req) {
-        return CalendarRoutes::getEvents(req, start, end);
-    });
+    server->route("/calendar/events",
+                  QHttpServerRequest::Method::Options,
+                  [](const QHttpServerRequest &req) {
+                      Q_UNUSED(req)
+                      return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
+                  });
+    server->route("/calendar/events",
+                  QHttpServerRequest::Method::Post,
+                  [](const QHttpServerRequest &req) { return CalendarRoutes::createEvent(req); });
 
-    server->route("/calendar/events", QHttpServerRequest::Method::Options, [](const QHttpServerRequest &req) {
-        Q_UNUSED(req)
-        return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
-    });
-    server->route("/calendar/events", QHttpServerRequest::Method::Post, [](const QHttpServerRequest &req) {
-        return CalendarRoutes::createEvent(req);
-    });
-
-    server->route("/calendar/events/<arg>", QHttpServerRequest::Method::Options, [](const QString &id, const QHttpServerRequest &req) {
-        Q_UNUSED(req)
-        return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
-    });
-    server->route("/calendar/events/<arg>", QHttpServerRequest::Method::Put, [](const QString &id, const QHttpServerRequest &req) {
-        return CalendarRoutes::updateEvent(req, id);
-    });
-    server->route("/calendar/events/<arg>", QHttpServerRequest::Method::Delete, [](const QString &id, const QHttpServerRequest &req) {
-        return CalendarRoutes::deleteEvent(req, id);
-    });
-
+    server->route("/calendar/events/<arg>",
+                  QHttpServerRequest::Method::Options,
+                  [](const QString &id, const QHttpServerRequest &req) {
+                      Q_UNUSED(req)
+                      return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
+                  });
+    server->route("/calendar/events/<arg>",
+                  QHttpServerRequest::Method::Put,
+                  [](const QString &id, const QHttpServerRequest &req) {
+                      return CalendarRoutes::updateEvent(req, id);
+                  });
+    server->route("/calendar/events/<arg>",
+                  QHttpServerRequest::Method::Delete,
+                  [](const QString &id, const QHttpServerRequest &req) {
+                      return CalendarRoutes::deleteEvent(req, id);
+                  });
 }
 
 // Las implementaciones originales se mantienen si las vas a usar internamente
 QHttpServerResponse CalendarRoutes::getEvents(const QHttpServerRequest &request,
-                                              const QString &start, const QString &end) {
+                                              const QString &start,
+                                              const QString &end)
+{
     QString authHeader = request.value("Authorization");
     if (authHeader.isEmpty()) {
         authHeader = request.value("authorization");
@@ -51,7 +64,8 @@ QHttpServerResponse CalendarRoutes::getEvents(const QHttpServerRequest &request,
     qDebug() << "authorization:" << authorize;
 
     if (authorize.value("role") == "Student") {
-        return createCorsResponse("Only Teachers can add events", QHttpServerResponse::StatusCode::InternalServerError);
+        return createCorsResponse("Only Teachers can add events",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     // Parse and validate date parameters
@@ -72,13 +86,16 @@ QHttpServerResponse CalendarRoutes::getEvents(const QHttpServerRequest &request,
 
     QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery q(db);
-    q.prepare("SELECT id, title, description, eventType, startTime, endTime, attendees, priority, color, createdBy, createdAt, updatedAt FROM calendar WHERE startTime < ? AND endTime > ?");
+    q.prepare(
+        "SELECT id, title, description, eventType, startTime, endTime, attendees, priority, color, "
+        "createdBy, createdAt, updatedAt FROM calendar WHERE startTime < ? AND endTime > ?");
     q.addBindValue(endDate);
     q.addBindValue(startDate);
 
     if (!q.exec()) {
         qDebug() << "Query error:" << q.lastError().text();
-        return createCorsResponse("Database error", QHttpServerResponse::StatusCode::InternalServerError);
+        return createCorsResponse("Database error",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     QJsonArray eventsArr;
@@ -115,7 +132,8 @@ QHttpServerResponse CalendarRoutes::getEvents(const QHttpServerRequest &request,
     return createCorsResponse(responseJson.toJson(), QHttpServerResponse::StatusCode::Ok);
 }
 
-QHttpServerResponse CalendarRoutes::createEvent(const QHttpServerRequest &request) {
+QHttpServerResponse CalendarRoutes::createEvent(const QHttpServerRequest &request)
+{
     QString authHeader = request.value("Authorization");
     if (authHeader.isEmpty()) {
         authHeader = request.value("authorization");
@@ -143,7 +161,8 @@ QHttpServerResponse CalendarRoutes::createEvent(const QHttpServerRequest &reques
     QDateTime startDateTime = QDateTime::fromString(json["startTime"].toString(), Qt::ISODate);
     QDateTime endDateTime = QDateTime::fromString(json["endTime"].toString(), Qt::ISODate);
     if (!startDateTime.isValid() || !endDateTime.isValid()) {
-        return createCorsResponse("Invalid date format", QHttpServerResponse::StatusCode::BadRequest);
+        return createCorsResponse("Invalid date format",
+                                  QHttpServerResponse::StatusCode::BadRequest);
     }
 
     // Handle attendees array
@@ -156,7 +175,8 @@ QHttpServerResponse CalendarRoutes::createEvent(const QHttpServerRequest &reques
 
     QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery q(db);
-    q.prepare("INSERT INTO calendar (title, description, eventType, startTime, endTime, attendees, priority, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    q.prepare("INSERT INTO calendar (title, description, eventType, startTime, endTime, attendees, "
+              "priority, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     q.addBindValue(title);
     q.addBindValue(description);
     q.addBindValue(eventType);
@@ -170,9 +190,11 @@ QHttpServerResponse CalendarRoutes::createEvent(const QHttpServerRequest &reques
         qDebug() << "Insert error:" << q.lastError().text();
         // Check for unique constraint violations
         if (q.lastError().text().contains("UNIQUE constraint failed")) {
-            return createCorsResponse("Something went wrong", QHttpServerResponse::StatusCode::Conflict);
+            return createCorsResponse("Something went wrong",
+                                      QHttpServerResponse::StatusCode::Conflict);
         }
-        return createCorsResponse("New event registration failed", QHttpServerResponse::StatusCode::InternalServerError);
+        return createCorsResponse("New event registration failed",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     // Get the inserted ID
@@ -191,11 +213,10 @@ QHttpServerResponse CalendarRoutes::createEvent(const QHttpServerRequest &reques
     responseJson["color"] = color;
 
     return createCorsResponse(responseJson, QHttpServerResponse::StatusCode::Created);
-
 }
 
-QHttpServerResponse CalendarRoutes::updateEvent(const QHttpServerRequest &request,
-                                                const QString &Id) {
+QHttpServerResponse CalendarRoutes::updateEvent(const QHttpServerRequest &request, const QString &Id)
+{
     QString authHeader = request.value("Authorization");
     if (authHeader.isEmpty()) {
         authHeader = request.value("authorization");
@@ -225,18 +246,24 @@ QHttpServerResponse CalendarRoutes::updateEvent(const QHttpServerRequest &reques
     }
 
     // Get current values as defaults
-    QString title = json.contains("title") ? json["title"].toString() : checkQuery.value("title").toString();
-    QString description = json.contains("description") ? json["description"].toString() : checkQuery.value("description").toString();
-    QString eventType = json.contains("eventType") ? json["eventType"].toString() : checkQuery.value("eventType").toString();
-    QString priority = json.contains("priority") ? json["priority"].toString() : checkQuery.value("priority").toString();
-    QString color = json.contains("color") ? json["color"].toString() : checkQuery.value("color").toString();
+    QString title = json.contains("title") ? json["title"].toString()
+                                           : checkQuery.value("title").toString();
+    QString description = json.contains("description") ? json["description"].toString()
+                                                       : checkQuery.value("description").toString();
+    QString eventType = json.contains("eventType") ? json["eventType"].toString()
+                                                   : checkQuery.value("eventType").toString();
+    QString priority = json.contains("priority") ? json["priority"].toString()
+                                                 : checkQuery.value("priority").toString();
+    QString color = json.contains("color") ? json["color"].toString()
+                                           : checkQuery.value("color").toString();
 
     // Handle datetime fields
     QDateTime startDateTime, endDateTime;
     if (json.contains("startTime")) {
         startDateTime = QDateTime::fromString(json["startTime"].toString(), Qt::ISODate);
         if (!startDateTime.isValid()) {
-            return createCorsResponse("Invalid start date format", QHttpServerResponse::StatusCode::BadRequest);
+            return createCorsResponse("Invalid start date format",
+                                      QHttpServerResponse::StatusCode::BadRequest);
         }
     } else {
         startDateTime = QDateTime::fromString(checkQuery.value("startTime").toString(), Qt::ISODate);
@@ -245,7 +272,8 @@ QHttpServerResponse CalendarRoutes::updateEvent(const QHttpServerRequest &reques
     if (json.contains("endTime")) {
         endDateTime = QDateTime::fromString(json["endTime"].toString(), Qt::ISODate);
         if (!endDateTime.isValid()) {
-            return createCorsResponse("Invalid end date format", QHttpServerResponse::StatusCode::BadRequest);
+            return createCorsResponse("Invalid end date format",
+                                      QHttpServerResponse::StatusCode::BadRequest);
         }
     } else {
         endDateTime = QDateTime::fromString(checkQuery.value("endTime").toString(), Qt::ISODate);
@@ -272,7 +300,8 @@ QHttpServerResponse CalendarRoutes::updateEvent(const QHttpServerRequest &reques
 
     // Update the event
     QSqlQuery updateQuery(db);
-    updateQuery.prepare("UPDATE calendar SET title = ?, description = ?, eventType = ?, startTime = ?, endTime = ?, attendees = ?, priority = ?, color = ? WHERE id = ?");
+    updateQuery.prepare("UPDATE calendar SET title = ?, description = ?, eventType = ?, startTime "
+                        "= ?, endTime = ?, attendees = ?, priority = ?, color = ? WHERE id = ?");
     updateQuery.addBindValue(title);
     updateQuery.addBindValue(description);
     updateQuery.addBindValue(eventType);
@@ -287,9 +316,11 @@ QHttpServerResponse CalendarRoutes::updateEvent(const QHttpServerRequest &reques
         qDebug() << "Update error:" << updateQuery.lastError().text();
         // Check for unique constraint violations
         if (updateQuery.lastError().text().contains("UNIQUE constraint failed")) {
-            return createCorsResponse("Something went wrong", QHttpServerResponse::StatusCode::Conflict);
+            return createCorsResponse("Something went wrong",
+                                      QHttpServerResponse::StatusCode::Conflict);
         }
-        return createCorsResponse("Event update failed", QHttpServerResponse::StatusCode::InternalServerError);
+        return createCorsResponse("Event update failed",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     // Check if any rows were affected
@@ -312,8 +343,8 @@ QHttpServerResponse CalendarRoutes::updateEvent(const QHttpServerRequest &reques
     return createCorsResponse(responseJson, QHttpServerResponse::StatusCode::Ok);
 }
 
-QHttpServerResponse CalendarRoutes::deleteEvent(const QHttpServerRequest &request,
-                                                const QString &Id) {
+QHttpServerResponse CalendarRoutes::deleteEvent(const QHttpServerRequest &request, const QString &Id)
+{
     QString authHeader = request.value("Authorization");
     if (authHeader.isEmpty()) {
         authHeader = request.value("authorization");
@@ -337,7 +368,8 @@ QHttpServerResponse CalendarRoutes::deleteEvent(const QHttpServerRequest &reques
 
     if (!deleteQuery.exec()) {
         qDebug() << "Delete error:" << deleteQuery.lastError().text();
-        return createCorsResponse("Event deletion failed", QHttpServerResponse::StatusCode::InternalServerError);
+        return createCorsResponse("Event deletion failed",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     // Check if any rows were affected (event existed and was deleted)
