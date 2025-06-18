@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include "response_utils.h"
+#include "database_manager.h"
 
 class ProblemsRoutes {
 public:

@@ -37,18 +37,18 @@ database_manager::database_manager() {
                "joinDate DATETIME DEFAULT CURRENT_TIMESTAMP"
                ")");
     query.exec("CREATE TABLE IF NOT EXISTS calendar ("
-                     "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                     "title VARCHAR(200) NOT NULL,"
-                     "description TEXT,"
-                     "eventType VARCHAR(50) NOT NULL,"
-                     "startTime TIMESTAMP NOT NULL,"
-                     "endTime TIMESTAMP NOT NULL,"
-                     "attendees TEXT DEFAULT '',"
-                     "priority VARCHAR(20) DEFAULT 'medium',"
-                     "color VARCHAR(7) DEFAULT '#3b82f6',"
-                     "createdBy INTEGER REFERENCES users(id),"
-                     "createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
-                     "updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-                     ")");
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                "title VARCHAR(200) NOT NULL,"
+                "description TEXT,"
+                "eventType VARCHAR(50) NOT NULL,"
+                "startTime TIMESTAMP NOT NULL,"
+                "endTime TIMESTAMP NOT NULL,"
+                "attendees TEXT DEFAULT '',"
+                "priority VARCHAR(20) DEFAULT 'medium',"
+                "color VARCHAR(7) DEFAULT '#3b82f6',"
+                "createdBy INTEGER REFERENCES users(id),"
+                "createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+                "updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                ")");
 
 }
