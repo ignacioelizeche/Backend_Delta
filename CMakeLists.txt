@@ -14,6 +14,7 @@ set(SOURCES
     api.cpp
     auth_routes.cpp
     dashboard_routes.cpp
+    database_manager.cpp
     calendar_routes.cpp
     problems_routes.cpp
     ranking_routes.cpp
@@ -22,12 +23,14 @@ set(SOURCES
     exams_routes.cpp
     notebooks_routes.cpp
     response_utils.cpp
+    jwt_helper.cpp
 )
 
 set(HEADERS
     api.h
     auth_routes.h
     dashboard_routes.h
+    database_manager.h
     calendar_routes.h
     problems_routes.h
     ranking_routes.h
@@ -36,16 +39,12 @@ set(HEADERS
     exams_routes.h
     notebooks_routes.h
     response_utils.h
+    jwt_helper.h
 )
 
 qt_add_executable(RestApiServer
     ${SOURCES}
     ${HEADERS}
-    database_manager.h database_manager.cpp
-    database_manager.h
-    database_manager.cpp
-    jwt_helper.h jwt_helper.cpp
-    jwt_helper.cpp
 )
 
 target_link_libraries(RestApiServer
