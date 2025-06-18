@@ -67,4 +67,8 @@ database_manager::database_manager()
                "createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
                "updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
                ")");
+
+
+
+
 }
