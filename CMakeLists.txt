@@ -30,6 +30,7 @@ set(HEADERS
     api.h
     auth_routes.h
     dashboard_routes.h
+    database_manager.h
     calendar_routes.h
     problems_routes.h
     ranking_routes.h
@@ -39,7 +40,6 @@ set(HEADERS
     notebooks_routes.h
     response_utils.h
     jwt_helper.h
-    database_manager.h
 )
 
 qt_add_executable(RestApiServer
