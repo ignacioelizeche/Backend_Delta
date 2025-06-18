@@ -14,3 +14,5 @@ QHttpServerResponse DashboardRoutes::getStats(const QHttpServerRequest &request)
     return QHttpServerResponse(QJsonDocument(response).toJson(),
                                QHttpServerResponse::StatusCode::Ok);
 }
+
+
