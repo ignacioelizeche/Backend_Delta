@@ -1,5 +1,5 @@
 #include "ranking_routes.h"
-
+//hello world
 void RankingRoutes::setupRoutes(QHttpServer* server) {
     server->route("/leaderboard", QHttpServerRequest::Method::Options, [](const QHttpServerRequest &req) {
         Q_UNUSED(req)
