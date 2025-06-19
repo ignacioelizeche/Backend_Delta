@@ -55,17 +55,18 @@ database_manager::database_manager()
                ")");
     query.exec("CREATE TABLE IF NOT EXISTS problems ("
                "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-               "title VARCHAR(200) NOT NULL,"
+               "title VARCHAR(50) NOT NULL,"
                "description TEXT,"
-               "eventType VARCHAR(50) NOT NULL,"
-               "startTime TIMESTAMP NOT NULL,"
-               "endTime TIMESTAMP NOT NULL,"
-               "attendees TEXT DEFAULT '',"
-               "priority VARCHAR(20) DEFAULT 'medium',"
-               "color VARCHAR(7) DEFAULT '#3b82f6',"
-               "createdBy INTEGER REFERENCES users(id),"
-               "createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
-               "updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+               "difficulty VARCHAR(20) NOT NULL,"
+               "topic VARCHAR(50) NOT NULL,"
+               "pointValue INTEGER DEFAULT 10,"
+               "xpValue INTEGER DEFAULT 25,"
+               "estimatedTime INTEGER DEFAULT 180,"
+               "tags TEXT DEFAULT '',"
+               "concepts TEXT DEFAULT '',"
+               "type TEXT DEFAULT '',"
+               "timeLimit INTEGER DEFAULT 240,"
+               "createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
                ")");
 
 
