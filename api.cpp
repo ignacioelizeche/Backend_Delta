@@ -9,6 +9,7 @@
 #include "exams_routes.h"
 #include "notebooks_routes.h"
 #include "response_utils.h"
+#include "leaderboard_services.h"
 
 #include <QHttpServerResponse>
 #include <QHostAddress>

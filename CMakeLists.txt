@@ -45,6 +45,7 @@ set(HEADERS
 qt_add_executable(RestApiServer
     ${SOURCES}
     ${HEADERS}
+    leaderboard_services.h leaderboard_services.cpp
 )
 
 target_link_libraries(RestApiServer

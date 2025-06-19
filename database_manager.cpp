@@ -50,5 +50,62 @@ database_manager::database_manager() {
                 "createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
                 "updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
                 ")");
+    query.exec("CREATE TABLE IF NOT EXISTS user_problem_solutions ("
+               "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+               "user_id INTEGER NOT NULL, "
+               "problem_id INTEGER NOT NULL, "
+               "is_correct BOOLEAN NOT NULL DEFAULT 0, "
+               "solved_at DATETIME NOT NULL, "
+               "points_earned INTEGER NOT NULL DEFAULT 0, "
+               "UNIQUE(user_id, problem_id), "
+               "FOREIGN KEY (user_id) REFERENCES users(id)"
+               ")");
+    // Tables for the full leaderboard system:
+    query.exec("CREATE TABLE IF NOT EXISTS user_activity_log ("
+               "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+               "user_id INTEGER NOT NULL, "
+               "activity_type TEXT NOT NULL, "
+               "points_earned INTEGER NOT NULL, "
+               "details TEXT, "
+               "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+               "FOREIGN KEY (user_id) REFERENCES users(id)"
+               ")");
+
+    query.exec("CREATE TABLE IF NOT EXISTS achievements ("
+               "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+               "name TEXT UNIQUE NOT NULL, "
+               "description TEXT, "
+               "points INTEGER DEFAULT 0, "
+               "icon TEXT"
+               ")");
+
+    query.exec("CREATE TABLE IF NOT EXISTS user_achievements ("
+               "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+               "user_id INTEGER NOT NULL, "
+               "achievement_id INTEGER NOT NULL, "
+               "earned_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+               "UNIQUE(user_id, achievement_id), "
+               "FOREIGN KEY (user_id) REFERENCES users(id), "
+               "FOREIGN KEY (achievement_id) REFERENCES achievements(id)"
+               ")");
+
+    query.exec("CREATE TABLE IF NOT EXISTS leaderboard_history ("
+               "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+               "user_id INTEGER NOT NULL, "
+               "rank_position INTEGER NOT NULL, "
+               "points INTEGER NOT NULL, "
+               "timeframe TEXT NOT NULL, "
+               "recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+               "FOREIGN KEY (user_id) REFERENCES users(id)"
+               ")");
+    /*
+     UNDER REVISION
+If it's neceserary it would be put later as QSql code
+ALTER TABLE users ADD COLUMN weeklyPoints INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN monthlyPoints INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN badge TEXT DEFAULT 'Bronze';
+ALTER TABLE users ADD COLUMN badgeColor TEXT DEFAULT '#cd7f32';
+ALTER TABLE users ADD COLUMN forumContributions INTEGER DEFAULT 0;
+    */
 
 }
