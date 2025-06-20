@@ -66,6 +66,19 @@ void ProblemsRoutes::setupRoutes(QHttpServer *server)
                   [](const QString &userId, const QHttpServerRequest &req) {
                       return ProblemsRoutes::getRecommendations(req, userId);
                   });
+    // POST /problems/{id}/submit
+    server->route("/problems",
+                  QHttpServerRequest::Method::Options,
+                  [](const QHttpServerRequest &req) {
+                      Q_UNUSED(req)
+                      return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
+                  });
+    server->route("/problems",
+                  QHttpServerRequest::Method::Post,
+                  [](const QHttpServerRequest &req) {
+                      return ProblemsRoutes::createProblem(req);
+                  });
+
 }
 
 QHttpServerResponse ProblemsRoutes::getProblems(const QString &difficulty, const QString &topic, const QHttpServerRequest &request)
@@ -479,4 +492,206 @@ QHttpServerResponse ProblemsRoutes::getRecommendations(const QHttpServerRequest 
 
     QJsonDocument responseJson(recommendationsArr);
     return createCorsResponse(responseJson.toJson(), QHttpServerResponse::StatusCode::Ok);
+}
+
+QHttpServerResponse ProblemsRoutes::createProblem(const QHttpServerRequest &request)
+{
+    // Authentication
+    QString authHeader = request.value("Authorization");
+    if (authHeader.isEmpty()) {
+        authHeader = request.value("authorization");
+    }
+    QString token;
+    if (authHeader.startsWith("Bearer ")) {
+        token = authHeader.mid(7);
+    } else {
+        token = request.value("token");
+    }
+    if (token.isEmpty()) {
+        return createCorsResponse("Token required", QHttpServerResponse::StatusCode::BadRequest);
+    }
+
+    QJsonObject authorize = jwt_helper::validateJWT(token);
+    qDebug() << "authorization:" << authorize;
+
+    if (!authorize.contains("userId") || authorize.value("userId").toInt() <= 0) {
+        return createCorsResponse("Invalid token", QHttpServerResponse::StatusCode::Unauthorized);
+    }
+
+    int userId = authorize.value("userId").toInt();
+
+    // Check if user is a teacher (assuming you have a role field in users table)
+    QSqlDatabase db = QSqlDatabase::database();
+    QSqlQuery roleQuery(db);
+    roleQuery.prepare("SELECT role FROM users WHERE id = ?");
+    roleQuery.addBindValue(userId);
+
+    if (!roleQuery.exec() || !roleQuery.next()) {
+        return createCorsResponse("User not found", QHttpServerResponse::StatusCode::NotFound);
+    }
+
+    QString userRole = roleQuery.value("role").toString();
+    if (userRole.toLower() != "teacher" && userRole.toLower() != "admin") {
+        return createCorsResponse("Access denied. Teacher privileges required.",
+                                  QHttpServerResponse::StatusCode::Forbidden);
+    }
+
+    // Parse and validate input JSON
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(request.body());
+    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+        return createCorsResponse("Invalid JSON format", QHttpServerResponse::StatusCode::BadRequest);
+    }
+
+    QJsonObject json = jsonDoc.object();
+
+    // Required fields validation
+    QStringList requiredFields = {"title", "description", "difficulty", "topic", "correctAnswer", "type"};
+    for (const QString &field : requiredFields) {
+        if (!json.contains(field) || json[field].toString().trimmed().isEmpty()) {
+            return createCorsResponse(QString("Field '%1' is required").arg(field),
+                                      QHttpServerResponse::StatusCode::BadRequest);
+        }
+    }
+
+    // Extract and validate data
+    QString title = json["title"].toString().trimmed();
+    QString description = json["description"].toString().trimmed();
+    QString difficulty = json["difficulty"].toString().trimmed().toLower();
+    QString topic = json["topic"].toString().trimmed();
+    QString correctAnswer = json["correctAnswer"].toString().trimmed();
+    QString type = json["type"].toString().trimmed().toLower();
+
+    // Validate difficulty
+    QStringList validDifficulties = {"easy", "medium", "hard", "expert"};
+    if (!validDifficulties.contains(difficulty)) {
+        return createCorsResponse("Invalid difficulty. Must be: easy, medium, hard, or expert",
+                                  QHttpServerResponse::StatusCode::BadRequest);
+    }
+
+    // Validate type
+    QStringList validTypes = {"multiple_choice", "short_answer", "essay", "code", "true_false"};
+    if (!validTypes.contains(type)) {
+        return createCorsResponse("Invalid type. Must be: multiple_choice, short_answer, essay, code, or true_false",
+                                  QHttpServerResponse::StatusCode::BadRequest);
+    }
+
+    // Optional fields with defaults
+    int pointValue = json.contains("pointValue") ? json["pointValue"].toInt() : 10;
+    int xpValue = json.contains("xpValue") ? json["xpValue"].toInt() : 5;
+    int estimatedTime = json.contains("estimatedTime") ? json["estimatedTime"].toInt() : 5; // minutes
+    int timeLimit = json.contains("timeLimit") ? json["timeLimit"].toInt() : 30; // minutes
+    QString explanation = json.contains("explanation") ? json["explanation"].toString().trimmed() : "";
+
+    // Validate numeric values
+    if (pointValue < 1 || pointValue > 1000) {
+        return createCorsResponse("Point value must be between 1 and 1000",
+                                  QHttpServerResponse::StatusCode::BadRequest);
+    }
+    if (xpValue < 1 || xpValue > 500) {
+        return createCorsResponse("XP value must be between 1 and 500",
+                                  QHttpServerResponse::StatusCode::BadRequest);
+    }
+    if (estimatedTime < 1 || estimatedTime > 180) {
+        return createCorsResponse("Estimated time must be between 1 and 180 minutes",
+                                  QHttpServerResponse::StatusCode::BadRequest);
+    }
+    if (timeLimit < 1 || timeLimit > 300) {
+        return createCorsResponse("Time limit must be between 1 and 300 minutes",
+                                  QHttpServerResponse::StatusCode::BadRequest);
+    }
+
+    // Process tags array
+    QString tagsStr = "";
+    if (json.contains("tags") && json["tags"].isArray()) {
+        QJsonArray tagsArray = json["tags"].toArray();
+        QStringList tagsList;
+        for (const auto &tagValue : tagsArray) {
+            QString tag = tagValue.toString().trimmed();
+            if (!tag.isEmpty()) {
+                tagsList.append(tag);
+            }
+        }
+        tagsStr = tagsList.join(",");
+    }
+
+    // Process concepts array
+    QString conceptsStr = "";
+    if (json.contains("concepts") && json["concepts"].isArray()) {
+        QJsonArray conceptsArray = json["concepts"].toArray();
+        QStringList conceptsList;
+        for (const auto &conceptValue : conceptsArray) {
+            QString concept = conceptValue.toString().trimmed();
+            if (!concept.isEmpty()) {
+                conceptsList.append(concept);
+            }
+        }
+        conceptsStr = conceptsList.join(",");
+    }
+
+    // Insert into database
+    QSqlQuery insertQuery(db);
+    insertQuery.prepare("INSERT INTO problems (title, description, difficulty, topic, pointValue, "
+                        "xpValue, estimatedTime, tags, concepts, type, timeLimit, correctAnswer, "
+                        "explanation, createdBy, createdAt) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+    insertQuery.addBindValue(title);
+    insertQuery.addBindValue(description);
+    insertQuery.addBindValue(difficulty);
+    insertQuery.addBindValue(topic);
+    insertQuery.addBindValue(pointValue);
+    insertQuery.addBindValue(xpValue);
+    insertQuery.addBindValue(estimatedTime);
+    insertQuery.addBindValue(tagsStr);
+    insertQuery.addBindValue(conceptsStr);
+    insertQuery.addBindValue(type);
+    insertQuery.addBindValue(timeLimit);
+    insertQuery.addBindValue(correctAnswer);
+    insertQuery.addBindValue(explanation);
+    insertQuery.addBindValue(userId);
+    insertQuery.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODate));
+
+    if (!insertQuery.exec()) {
+        qDebug() << "Insert problem error:" << insertQuery.lastError().text();
+        return createCorsResponse("Failed to create problem: " + insertQuery.lastError().text(),
+                                  QHttpServerResponse::StatusCode::InternalServerError);
+    }
+
+    // Get the ID of the newly inserted problem
+    int problemId = insertQuery.lastInsertId().toInt();
+
+    // Create success response with the new problem data
+    QJsonObject responseJson;
+    responseJson["success"] = true;
+    responseJson["message"] = "Problem created successfully";
+    responseJson["problemId"] = problemId;
+    responseJson["title"] = title;
+    responseJson["difficulty"] = difficulty;
+    responseJson["topic"] = topic;
+    responseJson["pointValue"] = pointValue;
+    responseJson["xpValue"] = xpValue;
+    responseJson["estimatedTime"] = estimatedTime;
+    responseJson["timeLimit"] = timeLimit;
+    responseJson["type"] = type;
+    responseJson["createdAt"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+
+    if (!tagsStr.isEmpty()) {
+        QJsonArray tagsArray;
+        QStringList tagsList = tagsStr.split(",", Qt::SkipEmptyParts);
+        for (const QString &tag : tagsList) {
+            tagsArray.append(tag.trimmed());
+        }
+        responseJson["tags"] = tagsArray;
+    }
+
+    if (!conceptsStr.isEmpty()) {
+        QJsonArray conceptsArray;
+        QStringList conceptsList = conceptsStr.split(",", Qt::SkipEmptyParts);
+        for (const QString &concept : conceptsList) {
+            conceptsArray.append(concept.trimmed());
+        }
+        responseJson["concepts"] = conceptsArray;
+    }
+
+    return createCorsResponse(responseJson, QHttpServerResponse::StatusCode::Created);
 }
