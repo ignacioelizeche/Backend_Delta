@@ -25,6 +25,7 @@ database_manager::database_manager()
     }
 
     QSqlQuery query(m_db);
+    query.exec("DROP TABLE IF EXISTS problems");
     query.exec("CREATE TABLE IF NOT EXISTS users ("
                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                "username TEXT UNIQUE, "
@@ -66,6 +67,8 @@ database_manager::database_manager()
                "concepts TEXT DEFAULT '',"
                "type TEXT DEFAULT '',"
                "timeLimit INTEGER DEFAULT 240,"
+               "correctAnswer VARCHAR(200) DEFAULT '',"
+               "explanation VARCHAR(200) DEFAULT '',"
                "createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
                ")");
 

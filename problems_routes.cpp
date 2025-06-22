@@ -3,6 +3,19 @@
 void ProblemsRoutes::setupRoutes(QHttpServer *server)
 {
     // GET /problems/difficulty/{Difficulty}/{topic}
+    server->route("/problems/difficulty/undefined/undefined",
+                  QHttpServerRequest::Method::Options,
+                  [](const QString &difficulty, const QString &topic, const QHttpServerRequest &req) {
+                      Q_UNUSED(req)
+                      return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
+                  });
+    // GET /problems - get all problems
+    server->route("/problems/difficulty/undefined/undefined",
+                  QHttpServerRequest::Method::Get,
+                  [](const QHttpServerRequest &req) {
+                      return ProblemsRoutes::getAllProblems(req);
+                  });
+    // GET /problems/difficulty/{Difficulty}/{topic}
     server->route("/problems/difficulty/<arg>/<arg>",
                   QHttpServerRequest::Method::Options,
                   [](const QString &difficulty, const QString &topic, const QHttpServerRequest &req) {
@@ -78,7 +91,6 @@ void ProblemsRoutes::setupRoutes(QHttpServer *server)
                   [](const QHttpServerRequest &req) {
                       return ProblemsRoutes::createProblem(req);
                   });
-
 }
 
 QHttpServerResponse ProblemsRoutes::getProblems(const QString &difficulty, const QString &topic, const QHttpServerRequest &request)
@@ -197,6 +209,7 @@ QHttpServerResponse ProblemsRoutes::getProblem(const QHttpServerRequest &request
     }
 
     if (!q.next()) {
+        qDebug() << "Query error:" << q.lastError().text();
         return createCorsResponse("Problem not found", QHttpServerResponse::StatusCode::NotFound);
     }
 
@@ -520,22 +533,6 @@ QHttpServerResponse ProblemsRoutes::createProblem(const QHttpServerRequest &requ
 
     int userId = authorize.value("userId").toInt();
 
-    // Check if user is a teacher (assuming you have a role field in users table)
-    QSqlDatabase db = QSqlDatabase::database();
-    QSqlQuery roleQuery(db);
-    roleQuery.prepare("SELECT role FROM users WHERE id = ?");
-    roleQuery.addBindValue(userId);
-
-    if (!roleQuery.exec() || !roleQuery.next()) {
-        return createCorsResponse("User not found", QHttpServerResponse::StatusCode::NotFound);
-    }
-
-    QString userRole = roleQuery.value("role").toString();
-    if (userRole.toLower() != "teacher" && userRole.toLower() != "admin") {
-        return createCorsResponse("Access denied. Teacher privileges required.",
-                                  QHttpServerResponse::StatusCode::Forbidden);
-    }
-
     // Parse and validate input JSON
     QJsonDocument jsonDoc = QJsonDocument::fromJson(request.body());
     if (jsonDoc.isNull() || !jsonDoc.isObject()) {
@@ -628,12 +625,23 @@ QHttpServerResponse ProblemsRoutes::createProblem(const QHttpServerRequest &requ
         conceptsStr = conceptsList.join(",");
     }
 
-    // Insert into database
+    // Insert into database - SIMPLIFIED VERSION
+    QSqlDatabase db = QSqlDatabase::database();
+
+    // Check database connection
+    if (!db.isOpen()) {
+        qDebug() << "Database connection error: Database is not open";
+        return createCorsResponse("Database connection error",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
+    }
+
     QSqlQuery insertQuery(db);
+
+    // SIMPLIFIED INSERT - only include fields that definitely exist
     insertQuery.prepare("INSERT INTO problems (title, description, difficulty, topic, pointValue, "
-                        "xpValue, estimatedTime, tags, concepts, type, timeLimit, correctAnswer, "
-                        "explanation, createdBy, createdAt) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        "xpValue, explanation, estimatedTime, tags, concepts, type, timeLimit, correctAnswer, "
+                        "createdAt) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     insertQuery.addBindValue(title);
     insertQuery.addBindValue(description);
@@ -648,17 +656,24 @@ QHttpServerResponse ProblemsRoutes::createProblem(const QHttpServerRequest &requ
     insertQuery.addBindValue(timeLimit);
     insertQuery.addBindValue(correctAnswer);
     insertQuery.addBindValue(explanation);
-    insertQuery.addBindValue(userId);
-    insertQuery.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODate));
+    insertQuery.addBindValue(QDateTime::currentDateTime());
 
     if (!insertQuery.exec()) {
-        qDebug() << "Insert problem error:" << insertQuery.lastError().text();
-        return createCorsResponse("Failed to create problem: " + insertQuery.lastError().text(),
+        QString errorMsg = insertQuery.lastError().text();
+        qDebug() << "Insert problem error:" << errorMsg;
+        qDebug() << "Query:" << insertQuery.lastQuery();
+        return createCorsResponse("Failed to create problem: " + errorMsg,
                                   QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     // Get the ID of the newly inserted problem
     int problemId = insertQuery.lastInsertId().toInt();
+
+    if (problemId <= 0) {
+        qDebug() << "Failed to get last insert ID";
+        return createCorsResponse("Failed to get problem ID after creation",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
+    }
 
     // Create success response with the new problem data
     QJsonObject responseJson;
@@ -694,4 +709,84 @@ QHttpServerResponse ProblemsRoutes::createProblem(const QHttpServerRequest &requ
     }
 
     return createCorsResponse(responseJson, QHttpServerResponse::StatusCode::Created);
+}
+
+QHttpServerResponse ProblemsRoutes::getAllProblems(const QHttpServerRequest &request)
+{
+    // Same authentication logic as your other methods
+    QString authHeader = request.value("Authorization");
+    if (authHeader.isEmpty()) {
+        authHeader = request.value("authorization");
+    }
+    QString token;
+    if (authHeader.startsWith("Bearer ")) {
+        token = authHeader.mid(7);
+    } else {
+        token = request.value("token");
+    }
+    if (token.isEmpty()) {
+        return createCorsResponse("Token required", QHttpServerResponse::StatusCode::BadRequest);
+    }
+    QJsonObject authorize = jwt_helper::validateJWT(token);
+
+    if (!authorize.contains("userId") || authorize.value("userId").toInt() <= 0) {
+        return createCorsResponse("Invalid token", QHttpServerResponse::StatusCode::Unauthorized);
+    }
+
+    QSqlDatabase db = QSqlDatabase::database();
+    QSqlQuery q(db);
+    // Remove the WHERE clause to get all problems
+    q.prepare("SELECT id, title, description, difficulty, topic, pointValue, xpValue, "
+              "estimatedTime, tags, concepts, type, timeLimit, createdAt "
+              "FROM problems ORDER BY createdAt DESC");
+
+    if (!q.exec()) {
+        qDebug() << "Query error:" << q.lastError().text();
+        return createCorsResponse("Database error",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
+    }
+
+    // Rest of the code is the same as getProblems()...
+    QJsonArray problemsArr;
+    while (q.next()) {
+        QJsonObject problemJson;
+        problemJson["id"] = q.value("id").toInt();
+        problemJson["title"] = q.value("title").toString();
+        problemJson["description"] = q.value("description").toString();
+        problemJson["difficulty"] = q.value("difficulty").toString();
+        problemJson["topic"] = q.value("topic").toString();
+        problemJson["pointValue"] = q.value("pointValue").toInt();
+        problemJson["xpValue"] = q.value("xpValue").toInt();
+        problemJson["estimatedTime"] = q.value("estimatedTime").toInt();
+
+        // Convert comma-separated tags and concepts to arrays
+        QString tagsStr = q.value("tags").toString();
+        QJsonArray tagsArray;
+        if (!tagsStr.isEmpty()) {
+            QStringList tagsList = tagsStr.split(",", Qt::SkipEmptyParts);
+            for (const QString &tag : tagsList) {
+                tagsArray.append(tag.trimmed());
+            }
+        }
+        problemJson["tags"] = tagsArray;
+
+        QString conceptsStr = q.value("concepts").toString();
+        QJsonArray conceptsArray;
+        if (!conceptsStr.isEmpty()) {
+            QStringList conceptsList = conceptsStr.split(",", Qt::SkipEmptyParts);
+            for (const QString &concept : conceptsList) {
+                conceptsArray.append(concept.trimmed());
+            }
+        }
+        problemJson["concepts"] = conceptsArray;
+
+        problemJson["type"] = q.value("type").toString();
+        problemJson["timeLimit"] = q.value("timeLimit").toInt();
+        problemJson["createdAt"] = q.value("createdAt").toDateTime().toString(Qt::ISODate);
+
+        problemsArr.append(problemJson);
+    }
+
+    QJsonDocument responseJson(problemsArr);
+    return createCorsResponse(responseJson.toJson(), QHttpServerResponse::StatusCode::Ok);
 }

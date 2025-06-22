@@ -33,5 +33,6 @@ private:
     static QHttpServerResponse getRecommendations(const QHttpServerRequest &request,
                                                   const QString &userId);
     static QHttpServerResponse createProblem(const QHttpServerRequest &request);
+    static QHttpServerResponse getAllProblems(const QHttpServerRequest &request);
 };
 #endif // PROBLEMS_ROUTES_H
