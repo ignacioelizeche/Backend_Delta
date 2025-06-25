@@ -252,8 +252,10 @@ QHttpServerResponse ProblemsRoutes::getProblem(const QHttpServerRequest &request
     return createCorsResponse(problemJson, QHttpServerResponse::StatusCode::Ok);
 }
 
+// In your problems_routes.cpp file
 QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &request, const QString &id)
 {
+    // Authorization code
     QString authHeader = request.value("Authorization");
     if (authHeader.isEmpty()) {
         authHeader = request.value("authorization");
@@ -267,6 +269,7 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
     if (token.isEmpty()) {
         return createCorsResponse("Token required", QHttpServerResponse::StatusCode::BadRequest);
     }
+
     QJsonObject authorize = jwt_helper::validateJWT(token);
     qDebug() << "authorization:" << authorize;
 
@@ -284,14 +287,23 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
         return createCorsResponse("Answer is required", QHttpServerResponse::StatusCode::BadRequest);
     }
 
+    // Get database instance
+    QSqlDatabase db = database_manager::instance().database();
+
+    // Start transaction for data consistency
+    if (!db.transaction()) {
+        qDebug() << "Failed to start transaction:" << db.lastError().text();
+        return createCorsResponse("Database error", QHttpServerResponse::StatusCode::InternalServerError);
+    }
+
     // Get problem details first
-    QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery problemQuery(db);
-    problemQuery.prepare("SELECT title, difficulty, xpValue, pointValue, correctAnswer, explanation "
+    problemQuery.prepare("SELECT title, difficulty, xpValue, pointValue, correctAnswer, explanation, topic "
                          "FROM problems WHERE id = ?");
-    problemQuery.addBindValue(id);
+    problemQuery.addBindValue(id.toInt());
 
     if (!problemQuery.exec() || !problemQuery.next()) {
+        db.rollback();
         return createCorsResponse("Problem not found", QHttpServerResponse::StatusCode::NotFound);
     }
 
@@ -306,8 +318,9 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
     QSqlQuery attemptQuery(db);
     attemptQuery.prepare("INSERT INTO problem_attempts (userId, problemId, answer, correct, "
                          "xpEarned, coinsEarned, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)");
+
     attemptQuery.addBindValue(userId);
-    attemptQuery.addBindValue(id);
+    attemptQuery.addBindValue(id.toInt());
     attemptQuery.addBindValue(answer);
     attemptQuery.addBindValue(isCorrect);
     attemptQuery.addBindValue(xpEarned);
@@ -316,30 +329,52 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
 
     if (!attemptQuery.exec()) {
         qDebug() << "Insert attempt error:" << attemptQuery.lastError().text();
+        db.rollback();
         return createCorsResponse("Failed to record attempt",
-                                                 QHttpServerResponse::StatusCode::InternalServerError);
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
-    // Update user stats if correct
+    // Update user stats if correct (matching your column names)
     int newLevel = 0;
     if (isCorrect) {
         QSqlQuery updateUserQuery(db);
-        updateUserQuery.prepare("UPDATE users SET xp = xp + ?, coins = coins + ?, points = points + ? "
-                                "WHERE id = ?");
+        updateUserQuery.prepare("UPDATE users SET xpPoints = xpPoints + ?, coinBalance = coinBalance + ?, "
+                                "totalProblemsCompleted = totalProblemsCompleted + 1 WHERE id = ?");
         updateUserQuery.addBindValue(xpEarned);
         updateUserQuery.addBindValue(coinsEarned);
-        updateUserQuery.addBindValue(pointsEarned);
         updateUserQuery.addBindValue(userId);
-        updateUserQuery.exec();
+
+        if (!updateUserQuery.exec()) {
+            qDebug() << "Update user error:" << updateUserQuery.lastError().text();
+            db.rollback();
+            return createCorsResponse("Failed to update user stats",
+                                      QHttpServerResponse::StatusCode::InternalServerError);
+        }
 
         // Calculate new level (simplified - assuming 100 XP per level)
         QSqlQuery levelQuery(db);
-        levelQuery.prepare("SELECT xp FROM users WHERE id = ?");
+        levelQuery.prepare("SELECT xpPoints FROM users WHERE id = ?");
         levelQuery.addBindValue(userId);
         if (levelQuery.exec() && levelQuery.next()) {
-            int totalXp = levelQuery.value("xp").toInt();
+            int totalXp = levelQuery.value("xpPoints").toInt();
             newLevel = (totalXp / 100) + 1;
+
+            // Update level if it changed
+            if (newLevel > 1) {
+                QSqlQuery updateLevelQuery(db);
+                updateLevelQuery.prepare("UPDATE users SET level = ? WHERE id = ?");
+                updateLevelQuery.addBindValue(newLevel);
+                updateLevelQuery.addBindValue(userId);
+                updateLevelQuery.exec();
+            }
         }
+    }
+
+    // Commit transaction
+    if (!db.commit()) {
+        qDebug() << "Failed to commit transaction:" << db.lastError().text();
+        db.rollback();
+        return createCorsResponse("Database error", QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     // Check for achievements (simplified example)
@@ -349,16 +384,17 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
         achievementQuery.prepare("SELECT COUNT(*) FROM problem_attempts WHERE userId = ? AND correct = 1 "
                                  "AND problemId IN (SELECT id FROM problems WHERE topic = ?)");
         achievementQuery.addBindValue(userId);
-        achievementQuery.addBindValue(problemQuery.value("title").toString().contains("Calculus") ? "Calculus" : "Math");
+        QString topic = problemQuery.value("topic").toString();
+        achievementQuery.addBindValue(topic);
 
         if (achievementQuery.exec() && achievementQuery.next()) {
             int correctCount = achievementQuery.value(0).toInt();
             if (correctCount == 10) {
                 QJsonObject achievement;
                 achievement["id"] = 2;
-                achievement["title"] = "Calculus Master";
-                achievement["description"] = "Solved 10 calculus problems";
-                achievement["icon"] = "📐";
+                achievement["title"] = topic + " Master";
+                achievement["description"] = "Solved 10 " + topic.toLower() + " problems";
+                achievement["icon"] = "🏆";
                 achievements.append(achievement);
             }
         }
@@ -368,7 +404,7 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
     int nextSuggestedProblem = 0;
     QSqlQuery nextQuery(db);
     nextQuery.prepare("SELECT id FROM problems WHERE id > ? ORDER BY id LIMIT 1");
-    nextQuery.addBindValue(id);
+    nextQuery.addBindValue(id.toInt());
     if (nextQuery.exec() && nextQuery.next()) {
         nextSuggestedProblem = nextQuery.value("id").toInt();
     }

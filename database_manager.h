@@ -17,6 +17,9 @@ private:
 
     QSqlDatabase m_db;
 
+
+    void createProblemAttemptsTable();
+
     // Prevent copies
     database_manager(const database_manager &) = delete;
     database_manager &operator=(const database_manager &) = delete;
