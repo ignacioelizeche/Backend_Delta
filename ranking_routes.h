@@ -1,5 +1,5 @@
-#ifndef LEADERBOARD_ROUTES_H
-#define LEADERBOARD_ROUTES_H
+#ifndef RANKING_ROUTES_H
+#define RANKING_ROUTES_H
 
 #include <QHttpServer>
 #include <QHttpServerRequest>
