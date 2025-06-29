@@ -685,13 +685,13 @@ QHttpServerResponse ProblemsRoutes::createProblem(const QHttpServerRequest &requ
     insertQuery.addBindValue(topic);
     insertQuery.addBindValue(pointValue);
     insertQuery.addBindValue(xpValue);
+    insertQuery.addBindValue(explanation);
     insertQuery.addBindValue(estimatedTime);
     insertQuery.addBindValue(tagsStr);
     insertQuery.addBindValue(conceptsStr);
     insertQuery.addBindValue(type);
     insertQuery.addBindValue(timeLimit);
     insertQuery.addBindValue(correctAnswer);
-    insertQuery.addBindValue(explanation);
     insertQuery.addBindValue(QDateTime::currentDateTime());
 
     if (!insertQuery.exec()) {
