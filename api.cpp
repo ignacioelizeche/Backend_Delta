@@ -3,7 +3,6 @@
 #include "dashboard_routes.h"
 #include "calendar_routes.h"
 #include "problems_routes.h"
-#include "ranking_routes.h"
 #include "forum_routes.h"
 #include "exams_routes.h"
 #include "notebooks_routes.h"
@@ -49,7 +48,6 @@ API::API(QObject *parent) : QObject(parent) {
     DashboardRoutes::setupRoutes(m_httpServer);
     CalendarRoutes::setupRoutes(m_httpServer);
     ProblemsRoutes::setupRoutes(m_httpServer);
-    RankingRoutes::setupRoutes(m_httpServer);
     ForumRoutes::setupRoutes(m_httpServer);
     VisualizationsRoutes::setupRoutes(m_httpServer);
     ExamsRoutes::setupRoutes(m_httpServer);
