@@ -1,4 +1,4 @@
-#include "leaderboard_routes.h"
+#include "ranking_routes.h"
 #include <QSqlRecord>  // Agregado para solucionar el error
 
 void LeaderboardRoutes::setupRoutes(QHttpServer *server)
