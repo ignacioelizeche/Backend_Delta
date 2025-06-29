@@ -7,7 +7,7 @@
 #include "exams_routes.h"
 #include "notebooks_routes.h"
 #include "response_utils.h"
-#include "leaderboard_routes.h"
+#include "ranking_routes.h"
 
 #include <QHttpServerResponse>
 #include <QHostAddress>
