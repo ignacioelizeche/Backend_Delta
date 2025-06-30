@@ -111,32 +111,33 @@ database_manager::database_manager()
 
     //Table for exams documents
     query.exec("DROP TABLE IF EXISTS documents");
+    // Create documents table
     query.exec("CREATE TABLE IF NOT EXISTS documents ("
-               "id INTEGER PRIMARY KEY,"
-               "title TEXT NOT NULL,"
-               "description TEXT,"
-               "subject TEXT,"
-               "category TEXT,"
-               "difficulty TEXT,"
-               "topics TEXT,"
-               "tags TEXT,"
-               "prerequisites TEXT,"
-               "filename TEXT NOT NULL,"
-               "filesize INTEGER NOT NULL,"
-               "filepath TEXT NOT NULL,"
-               "pagecount INTEGER,"
-               "ispublic BOOLEAN DEFAULT 1,"
-               "isactive BOOLEAN DEFAULT 1,"
-               "uploadedby INTEGER NOT NULL,"
-               "uploadedat DATETIME DEFAULT CURRENT_TIMESTAMP,"
-               "updatedat DATETIME DEFAULT CURRENT_TIMESTAMP,"
-               "totaldownloads INTEGER DEFAULT 0,"
-               "totalviews INTEGER DEFAULT 0,"
-               "averagerating DECIMAL(3,2) DEFAULT 0.00,"
-               "ratingcount INTEGER DEFAULT 0,"
-               "filehash TEXT,"
-               "FOREIGN KEY (uploadedby) REFERENCES users(id)"
-               ")");
+           "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+           "title TEXT NOT NULL,"
+           "description TEXT,"
+           "subject TEXT,"
+           "category TEXT,"
+           "difficulty TEXT,"
+           "topics TEXT,"
+           "tags TEXT,"
+           "prerequisites TEXT,"
+           "filename TEXT NOT NULL,"
+           "filedata TEXT,"
+           "filesize INTEGER,"
+           "pagecount INTEGER,"
+           "ispublic BOOLEAN DEFAULT 0,"
+           "isactive BOOLEAN DEFAULT 1,"
+           "uploadedby INTEGER NOT NULL,"
+           "uploadedat DATETIME DEFAULT CURRENT_TIMESTAMP,"
+           "updatedat DATETIME DEFAULT CURRENT_TIMESTAMP,"
+           "totaldownloads INTEGER DEFAULT 0,"
+           "totalviews INTEGER DEFAULT 0,"
+           "ratingcount INTEGER DEFAULT 0,"
+           "averagerating REAL DEFAULT 0.0,"
+           "filehash TEXT UNIQUE"
+           ")");
+
 
     // Create problem_attempts table
     createProblemAttemptsTable();
