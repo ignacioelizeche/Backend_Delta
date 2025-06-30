@@ -161,21 +161,28 @@ QHttpServerResponse ExamsRoutes::getExam(const QHttpServerRequest &request, cons
     QJsonObject authorize = jwt_helper::validateJWT(token);
     qDebug() << "authorization:" << authorize;
 
-    // Verificar que el token sea válido
     if (authorize.isEmpty() || !authorize.contains("role")) {
         return createCorsResponse("Invalid token", QHttpServerResponse::StatusCode::Unauthorized);
     }
 
-    // Validar que el ID sea un número válido
     bool ok;
-    int documentId = id.toInt(&ok);  // Fixed: Pass the ok variable by reference
+    int documentId = id.toInt(&ok);
     if (!ok || documentId <= 0) {
         return createCorsResponse("Invalid document ID", QHttpServerResponse::StatusCode::BadRequest);
     }
 
     QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery q(db);
-    q.prepare("SELECT id, title, filename, filesize, mimetype, filedata, uploadedBy, uploadedAt, updatedAt FROM documents WHERE id = ?");
+
+    q.prepare(R"(
+        SELECT id, title, description, subject, category, difficulty,
+               topics, prerequisites, tags,
+               filename, filesize, filedata, pagecount,
+               ispublic, isactive,
+               uploadedby, uploadedat, updatedat,
+               totaldownloads, totalviews, ratingcount, averagerating
+        FROM documents WHERE id = ?
+    )");
     q.addBindValue(documentId);
 
     if (!q.exec()) {
@@ -190,13 +197,54 @@ QHttpServerResponse ExamsRoutes::getExam(const QHttpServerRequest &request, cons
     QJsonObject documentJson;
     documentJson["id"] = q.value("id").toInt();
     documentJson["title"] = q.value("title").toString();
+    documentJson["description"] = q.value("description").toString();
+    documentJson["subject"] = q.value("subject").toString();
+    documentJson["category"] = q.value("category").toString();
+    documentJson["difficulty"] = q.value("difficulty").toString();
+
+    // Parse topics JSON string
+    QString topicsStr = q.value("topics").toString();
+    QJsonArray topicsArray;
+    if (topicsStr.trimmed().startsWith("[") && topicsStr.trimmed().endsWith("]")) {
+        QJsonDocument doc = QJsonDocument::fromJson(topicsStr.toUtf8());
+        if (doc.isArray()) topicsArray = doc.array();
+    }
+    documentJson["topics"] = topicsArray;
+
+    // Parse prerequisites JSON string
+    QString prereqStr = q.value("prerequisites").toString();
+    QJsonArray prereqArray;
+    if (prereqStr.trimmed().startsWith("[") && prereqStr.trimmed().endsWith("]")) {
+        QJsonDocument doc = QJsonDocument::fromJson(prereqStr.toUtf8());
+        if (doc.isArray()) prereqArray = doc.array();
+    }
+    documentJson["prerequisites"] = prereqArray;
+
+    // Parse tags JSON string
+    QString tagsStr = q.value("tags").toString();
+    QJsonArray tagsArray;
+    if (tagsStr.trimmed().startsWith("[") && tagsStr.trimmed().endsWith("]")) {
+        QJsonDocument doc = QJsonDocument::fromJson(tagsStr.toUtf8());
+        if (doc.isArray()) tagsArray = doc.array();
+    }
+    documentJson["tags"] = tagsArray;
+
     documentJson["filename"] = q.value("filename").toString();
     documentJson["filesize"] = q.value("filesize").toLongLong();
-    documentJson["mimetype"] = q.value("mimetype").toString();
-    documentJson["filedata"] = q.value("filedata").toString(); // Base64 data
-    documentJson["uploadedBy"] = q.value("uploadedBy").toInt();
-    documentJson["uploadedAt"] = q.value("uploadedAt").toDateTime().toString(Qt::ISODate);
-    documentJson["updatedAt"] = q.value("updatedAt").toDateTime().toString(Qt::ISODate);
+    documentJson["filedata"] = q.value("filedata").toString();
+    documentJson["pageCount"] = q.value("pagecount").toInt();
+    documentJson["isPublic"] = q.value("ispublic").toBool();
+    documentJson["isActive"] = q.value("isactive").toBool();
+    documentJson["uploadedBy"] = q.value("uploadedby").toInt();
+    documentJson["uploadedAt"] = q.value("uploadedat").toDateTime().toString(Qt::ISODate);
+    documentJson["updatedAt"] = q.value("updatedat").toDateTime().toString(Qt::ISODate);
+    documentJson["totalDownloads"] = q.value("totaldownloads").toInt();
+    documentJson["totalViews"] = q.value("totalviews").toInt();
+    documentJson["ratingCount"] = q.value("ratingcount").toInt();
+    documentJson["averageRating"] = q.value("averagerating").toDouble();
+
+    // Optional: add createdByName if available from JWT or another source
+    documentJson["createdByName"] = authorize.value("username").toString("Unknown");
 
     QJsonDocument responseJson(documentJson);
     return createCorsResponse(responseJson.toJson(), QHttpServerResponse::StatusCode::Ok);
