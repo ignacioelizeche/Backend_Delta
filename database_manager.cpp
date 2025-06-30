@@ -15,6 +15,7 @@ database_manager::database_manager()
 {
     m_db = QSqlDatabase::addDatabase("QSQLITE");
     m_db.setDatabaseName("delta.db");
+
     if (!m_db.open()) {
         qDebug() << "Failed to open database:" << m_db.lastError().text();
     } else {
@@ -74,8 +75,7 @@ database_manager::database_manager()
                "createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
                ")");
 
-
-    // Create user_activity_log table for tracking all user activities
+    // Create user_activity_log table
     if (!query.exec("CREATE TABLE IF NOT EXISTS user_activity_log ("
                     "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                     "user_id INTEGER NOT NULL,"
@@ -92,7 +92,7 @@ database_manager::database_manager()
         qDebug() << "user_activity_log table created successfully.";
     }
 
-    // Create leaderboard_history table for storing historical rankings
+    // Create leaderboard_history table
     if (!query.exec("CREATE TABLE IF NOT EXISTS leaderboard_history ("
                     "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                     "user_id INTEGER NOT NULL,"
@@ -109,35 +109,33 @@ database_manager::database_manager()
         qDebug() << "leaderboard_history table created successfully.";
     }
 
-    //Table for exams documents
+    // Drop and recreate documents table
     query.exec("DROP TABLE IF EXISTS documents");
-    // Create documents table
     query.exec("CREATE TABLE IF NOT EXISTS documents ("
-           "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-           "title TEXT NOT NULL,"
-           "description TEXT,"
-           "subject TEXT,"
-           "category TEXT,"
-           "difficulty TEXT,"
-           "topics TEXT,"
-           "tags TEXT,"
-           "prerequisites TEXT,"
-           "filename TEXT NOT NULL,"
-           "filedata TEXT,"
-           "filesize INTEGER,"
-           "pagecount INTEGER,"
-           "ispublic BOOLEAN DEFAULT 0,"
-           "isactive BOOLEAN DEFAULT 1,"
-           "uploadedby INTEGER NOT NULL,"
-           "uploadedat DATETIME DEFAULT CURRENT_TIMESTAMP,"
-           "updatedat DATETIME DEFAULT CURRENT_TIMESTAMP,"
-           "totaldownloads INTEGER DEFAULT 0,"
-           "totalviews INTEGER DEFAULT 0,"
-           "ratingcount INTEGER DEFAULT 0,"
-           "averagerating REAL DEFAULT 0.0,"
-           "filehash TEXT UNIQUE"
-           ")");
-
+               "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+               "title TEXT NOT NULL,"
+               "description TEXT,"
+               "subject TEXT,"
+               "category TEXT,"
+               "difficulty TEXT,"
+               "topics TEXT,"
+               "tags TEXT,"
+               "prerequisites TEXT,"
+               "filename TEXT NOT NULL,"
+               "filedata TEXT,"
+               "filesize INTEGER,"
+               "pagecount INTEGER,"
+               "ispublic BOOLEAN DEFAULT 0,"
+               "isactive BOOLEAN DEFAULT 1,"
+               "uploadedby INTEGER NOT NULL,"
+               "uploadedat DATETIME DEFAULT CURRENT_TIMESTAMP,"
+               "updatedat DATETIME DEFAULT CURRENT_TIMESTAMP,"
+               "totaldownloads INTEGER DEFAULT 0,"
+               "totalviews INTEGER DEFAULT 0,"
+               "ratingcount INTEGER DEFAULT 0,"
+               "averagerating REAL DEFAULT 0.0,"
+               "filehash TEXT UNIQUE"
+               ")");
 
     // Create problem_attempts table
     createProblemAttemptsTable();
@@ -147,7 +145,6 @@ void database_manager::createProblemAttemptsTable()
 {
     QSqlQuery query(m_db);
 
-    // Create the problem_attempts table
     bool success = query.exec("CREATE TABLE IF NOT EXISTS problem_attempts ("
                               "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                               "userId INTEGER NOT NULL,"
@@ -167,7 +164,6 @@ void database_manager::createProblemAttemptsTable()
         return;
     }
 
-    // Create indexes for better performance
     query.exec("CREATE INDEX IF NOT EXISTS idx_attempts_userId ON problem_attempts(userId)");
     query.exec("CREATE INDEX IF NOT EXISTS idx_attempts_problemId ON problem_attempts(problemId)");
     query.exec("CREATE INDEX IF NOT EXISTS idx_attempts_timestamp ON problem_attempts(timestamp)");

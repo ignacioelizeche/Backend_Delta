@@ -1,17 +1,17 @@
 #include "exams_routes.h"
 
 void ExamsRoutes::setupRoutes(QHttpServer* server) {
-    // GET /exams
+    // GET /documents
     server->route("/documents", QHttpServerRequest::Method::Options, [](const QHttpServerRequest &req) {
         Q_UNUSED(req)
         return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
     });
     server->route("/documents", QHttpServerRequest::Method::Get,
-                  [](const QHttpServerRequest &req) {  // Debe ser const reference
+                  [](const QHttpServerRequest &req) {
                       return ExamsRoutes::getExams(req);
                   });
 
-    // POST /exams/upload
+    // POST /documents/uploadExams
     server->route("/documents/uploadExams", QHttpServerRequest::Method::Options, [](const QHttpServerRequest &req) {
         Q_UNUSED(req)
         return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
@@ -21,25 +21,25 @@ void ExamsRoutes::setupRoutes(QHttpServer* server) {
                       return ExamsRoutes::uploadExam(req);
                   });
 
-    // GET /exams/<id>
+    // GET /documents/view/<id>
     server->route("/documents/view/<arg>", QHttpServerRequest::Method::Options, [](const QString &id, const QHttpServerRequest &req) {
         Q_UNUSED(req)
         return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
     });
     server->route("/documents/view/<arg>", QHttpServerRequest::Method::Get,
-                  [](const QString &id,const QHttpServerRequest &req) {
+                  [](const QString &id, const QHttpServerRequest &req) {
                       return ExamsRoutes::getExam(req, id);
                   });
 
+    // GET /api/exams/<id>/pdf - Nueva ruta para servir PDF directamente
     server->route("/api/exams/<arg>/pdf", QHttpServerRequest::Method::Options, [](const QString &id, const QHttpServerRequest &req) {
         Q_UNUSED(req)
         return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
     });
-
     server->route("/api/exams/<arg>/pdf", QHttpServerRequest::Method::Get,
-                  [](const QString &id,const QHttpServerRequest &req) {
-        return ExamsRoutes::viewExam(req, id);
-    });
+                  [](const QString &id, const QHttpServerRequest &req) {
+                      return ExamsRoutes::viewExam(req, id);
+                  });
 }
 
 QHttpServerResponse ExamsRoutes::getExams(const QHttpServerRequest &request) {
@@ -66,8 +66,7 @@ QHttpServerResponse ExamsRoutes::getExams(const QHttpServerRequest &request) {
 
     QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery q(db);
-    if (!q.prepare("SELECT * "
-                   "FROM documents ORDER BY uploadedat DESC")) {
+    if (!q.prepare("SELECT * FROM documents ORDER BY uploadedat DESC")) {
         qDebug() << "Prepare error:" << q.lastError().text();
         return createCorsResponse("Database query preparation failed", QHttpServerResponse::StatusCode::InternalServerError);
     }
@@ -83,57 +82,41 @@ QHttpServerResponse ExamsRoutes::getExams(const QHttpServerRequest &request) {
         documentJson["id"] = q.value("id").toInt();
         documentJson["title"] = q.value("title").toString();
         documentJson["description"] = q.value("description").toString();
-        documentJson["filename"] = q.value("filename").toString();
-        documentJson["filesize"] = q.value("filesize").toInt();
-        documentJson["pdfContent"] = q.value("filedata").toString();
-        documentJson["uploadedBy"] = q.value("uploadedby").toInt();
-        documentJson["uploadedAt"] = q.value("uploadedat").toDateTime().toString(Qt::ISODate);
-        documentJson["updatedAt"] = q.value("updatedat").toDateTime().toString(Qt::ISODate);
         documentJson["subject"] = q.value("subject").toString();
         documentJson["category"] = q.value("category").toString();
         documentJson["difficulty"] = q.value("difficulty").toString();
+
+        // Parsear arrays JSON
+        documentJson["topics"] = parseStringToJsonArray(q.value("topics").toString());
+        documentJson["tags"] = parseStringToJsonArray(q.value("tags").toString());
+        documentJson["prerequisites"] = parseStringToJsonArray(q.value("prerequisites").toString());
+
+        // Información del archivo
+        documentJson["fileName"] = q.value("filename").toString();
+        documentJson["fileSize"] = q.value("filesize").toLongLong();
+        documentJson["pdfContent"] = q.value("filedata").toString(); // Base64 content
         documentJson["pageCount"] = q.value("pagecount").toInt();
+
+        // Estados y permisos
         documentJson["isPublic"] = q.value("ispublic").toBool();
         documentJson["isActive"] = q.value("isactive").toBool();
+
+        // Información de creador
+        documentJson["createdBy"] = q.value("uploadedby").toInt();
+        documentJson["createdByName"] = "Unknown"; // Se puede obtener de JWT o tabla usuarios
+
+        // Fechas
+        documentJson["createdAt"] = q.value("uploadedat").toDateTime().toString(Qt::ISODate);
+        documentJson["updatedAt"] = q.value("updatedat").toDateTime().toString(Qt::ISODate);
+
+        // Estadísticas
         documentJson["totalDownloads"] = q.value("totaldownloads").toInt();
         documentJson["totalViews"] = q.value("totalviews").toInt();
         documentJson["averageRating"] = q.value("averagerating").toDouble();
         documentJson["ratingCount"] = q.value("ratingcount").toInt();
-        documentJson["createdByName"] = "Unknown";  // Cambiar si tienes una tabla de usuarios
-        documentJson["additionalFiles"] = QJsonArray(); // En futuro puedes usar otra tabla
 
-        // Parsear topics
-        QJsonArray topicsArray;
-        QString topicsStr = q.value("topics").toString();
-        if (topicsStr.trimmed().startsWith("[") && topicsStr.trimmed().endsWith("]")) {
-            QJsonDocument doc = QJsonDocument::fromJson(topicsStr.toUtf8());
-            if (doc.isArray()) {
-                topicsArray = doc.array();
-            }
-        }
-        documentJson["topics"] = topicsArray;
-
-        // Parsear tags
-        QJsonArray tagsArray;
-        QString tagsStr = q.value("tags").toString();
-        if (tagsStr.trimmed().startsWith("[") && tagsStr.trimmed().endsWith("]")) {
-            QJsonDocument doc = QJsonDocument::fromJson(tagsStr.toUtf8());
-            if (doc.isArray()) {
-                tagsArray = doc.array();
-            }
-        }
-        documentJson["tags"] = tagsArray;
-
-        // Parsear prerequisites
-        QJsonArray prereqArray;
-        QString prereqStr = q.value("prerequisites").toString();
-        if (prereqStr.trimmed().startsWith("[") && prereqStr.trimmed().endsWith("]")) {
-            QJsonDocument doc = QJsonDocument::fromJson(prereqStr.toUtf8());
-            if (doc.isArray()) {
-                prereqArray = doc.array();
-            }
-        }
-        documentJson["prerequisites"] = prereqArray;
+        // Archivos adicionales (vacío por ahora)
+        documentJson["additionalFiles"] = QJsonArray();
 
         documentsArr.append(documentJson);
     }
@@ -142,8 +125,7 @@ QHttpServerResponse ExamsRoutes::getExams(const QHttpServerRequest &request) {
     return createCorsResponse(responseJson.toJson(), QHttpServerResponse::StatusCode::Ok);
 }
 
-QHttpServerResponse ExamsRoutes::getExam(const QHttpServerRequest &request, const QString &id)
-{
+QHttpServerResponse ExamsRoutes::getExam(const QHttpServerRequest &request, const QString &id) {
     QString authHeader = request.value("Authorization");
     if (authHeader.isEmpty()) {
         authHeader = request.value("authorization");
@@ -181,7 +163,7 @@ QHttpServerResponse ExamsRoutes::getExam(const QHttpServerRequest &request, cons
                ispublic, isactive,
                uploadedby, uploadedat, updatedat,
                totaldownloads, totalviews, ratingcount, averagerating
-        FROM documents WHERE id = ?
+        FROM documents WHERE id = ? AND isactive = 1
     )");
     q.addBindValue(documentId);
 
@@ -194,6 +176,16 @@ QHttpServerResponse ExamsRoutes::getExam(const QHttpServerRequest &request, cons
         return createCorsResponse("Document not found", QHttpServerResponse::StatusCode::NotFound);
     }
 
+    // Verificar permisos de acceso
+    int currentUserId = authorize["user_id"].toInt();
+    bool isDocumentPublic = q.value("ispublic").toBool();
+    int documentOwnerId = q.value("uploadedby").toInt();
+
+    if (!isDocumentPublic && currentUserId != documentOwnerId) {
+        return createCorsResponse("Access denied", QHttpServerResponse::StatusCode::Forbidden);
+    }
+
+    // Construir respuesta JSON
     QJsonObject documentJson;
     documentJson["id"] = q.value("id").toInt();
     documentJson["title"] = q.value("title").toString();
@@ -202,49 +194,43 @@ QHttpServerResponse ExamsRoutes::getExam(const QHttpServerRequest &request, cons
     documentJson["category"] = q.value("category").toString();
     documentJson["difficulty"] = q.value("difficulty").toString();
 
-    // Parse topics JSON string
-    QString topicsStr = q.value("topics").toString();
-    QJsonArray topicsArray;
-    if (topicsStr.trimmed().startsWith("[") && topicsStr.trimmed().endsWith("]")) {
-        QJsonDocument doc = QJsonDocument::fromJson(topicsStr.toUtf8());
-        if (doc.isArray()) topicsArray = doc.array();
-    }
-    documentJson["topics"] = topicsArray;
+    // Parsear arrays JSON
+    documentJson["topics"] = parseStringToJsonArray(q.value("topics").toString());
+    documentJson["prerequisites"] = parseStringToJsonArray(q.value("prerequisites").toString());
+    documentJson["tags"] = parseStringToJsonArray(q.value("tags").toString());
 
-    // Parse prerequisites JSON string
-    QString prereqStr = q.value("prerequisites").toString();
-    QJsonArray prereqArray;
-    if (prereqStr.trimmed().startsWith("[") && prereqStr.trimmed().endsWith("]")) {
-        QJsonDocument doc = QJsonDocument::fromJson(prereqStr.toUtf8());
-        if (doc.isArray()) prereqArray = doc.array();
-    }
-    documentJson["prerequisites"] = prereqArray;
-
-    // Parse tags JSON string
-    QString tagsStr = q.value("tags").toString();
-    QJsonArray tagsArray;
-    if (tagsStr.trimmed().startsWith("[") && tagsStr.trimmed().endsWith("]")) {
-        QJsonDocument doc = QJsonDocument::fromJson(tagsStr.toUtf8());
-        if (doc.isArray()) tagsArray = doc.array();
-    }
-    documentJson["tags"] = tagsArray;
-
-    documentJson["filename"] = q.value("filename").toString();
-    documentJson["filesize"] = q.value("filesize").toLongLong();
-    documentJson["filedata"] = q.value("filedata").toString();
+    // Información del archivo
+    documentJson["fileName"] = q.value("filename").toString();
+    documentJson["fileSize"] = q.value("filesize").toLongLong();
+    documentJson["pdfContent"] = q.value("filedata").toString(); // Base64 content
     documentJson["pageCount"] = q.value("pagecount").toInt();
+
+    // Estados y permisos
     documentJson["isPublic"] = q.value("ispublic").toBool();
     documentJson["isActive"] = q.value("isactive").toBool();
-    documentJson["uploadedBy"] = q.value("uploadedby").toInt();
-    documentJson["uploadedAt"] = q.value("uploadedat").toDateTime().toString(Qt::ISODate);
+
+    // Información de creador
+    documentJson["createdBy"] = q.value("uploadedby").toInt();
+    documentJson["createdByName"] = authorize.value("username").toString("Unknown");
+
+    // Fechas
+    documentJson["createdAt"] = q.value("uploadedat").toDateTime().toString(Qt::ISODate);
     documentJson["updatedAt"] = q.value("updatedat").toDateTime().toString(Qt::ISODate);
+
+    // Estadísticas
     documentJson["totalDownloads"] = q.value("totaldownloads").toInt();
     documentJson["totalViews"] = q.value("totalviews").toInt();
     documentJson["ratingCount"] = q.value("ratingcount").toInt();
     documentJson["averageRating"] = q.value("averagerating").toDouble();
 
-    // Optional: add createdByName if available from JWT or another source
-    documentJson["createdByName"] = authorize.value("username").toString("Unknown");
+    // Archivos adicionales (vacío por ahora)
+    documentJson["additionalFiles"] = QJsonArray();
+
+    // Incrementar contador de vistas
+    QSqlQuery updateQuery(db);
+    updateQuery.prepare("UPDATE documents SET totalviews = totalviews + 1 WHERE id = ?");
+    updateQuery.addBindValue(documentId);
+    updateQuery.exec(); // No fallar si esto no funciona
 
     QJsonDocument responseJson(documentJson);
     return createCorsResponse(responseJson.toJson(), QHttpServerResponse::StatusCode::Ok);
@@ -346,7 +332,7 @@ QHttpServerResponse ExamsRoutes::uploadExam(const QHttpServerRequest &request) {
     }
 
     // Validate category values
-    QStringList validCategories = {"exam", "study-guide", "notes", "assignment", "reference"};
+    QStringList validCategories = {"exam", "assignment", "lecture-notes", "study-guide", "reference", "practice"};
     if (!validCategories.contains(category.toLower())) {
         return createCorsResponse("Invalid category", QHttpServerResponse::StatusCode::BadRequest);
     }
@@ -386,7 +372,6 @@ QHttpServerResponse ExamsRoutes::uploadExam(const QHttpServerRequest &request) {
     QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery q(db);
 
-    // Updated query to match response format
     q.prepare("INSERT INTO documents (id, title, description, subject, category, difficulty, "
               "topics, tags, prerequisites, filename, filesize, filedata, pagecount, ispublic, "
               "isactive, uploadedby, uploadedat, updatedat, totaldownloads, totalviews, "
@@ -488,9 +473,9 @@ QHttpServerResponse ExamsRoutes::viewExam(const QHttpServerRequest &request, con
     QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery q(db);
 
-    q.prepare("SELECT d.filepath, d.filename, d.ispublic, d.uploadedby, d.isactive "
-              "FROM documents d "
-              "WHERE d.id = ? AND d.isactive = 1");
+    q.prepare("SELECT filedata, filename, ispublic, uploadedby, isactive "
+              "FROM documents "
+              "WHERE id = ? AND isactive = 1");
     q.addBindValue(documentId);
 
     if (!q.exec()) {
@@ -503,7 +488,7 @@ QHttpServerResponse ExamsRoutes::viewExam(const QHttpServerRequest &request, con
     }
 
     // Check access permissions
-    int currentUserId = authorize["id"].toInt();
+    int currentUserId = authorize["user_id"].toInt();
     bool isDocumentPublic = q.value("ispublic").toBool();
     int documentOwnerId = q.value("uploadedby").toInt();
 
@@ -512,31 +497,19 @@ QHttpServerResponse ExamsRoutes::viewExam(const QHttpServerRequest &request, con
     }
 
     // Get file information
-    QString relativeFilePath = q.value("filepath").toString();
+    QString base64Content = q.value("filedata").toString();
     QString originalFileName = q.value("filename").toString();
 
-    // Build absolute file path
-    QString absoluteFilePath = QCoreApplication::applicationDirPath() + "/" + relativeFilePath;
-
-    // Check if file exists and open it
-    QFile file(absoluteFilePath);
-    if (!file.exists()) {
-        qDebug() << "File not found on disk:" << absoluteFilePath;
-        return createCorsResponse("PDF file not found on server", QHttpServerResponse::StatusCode::NotFound);
+    if (base64Content.isEmpty()) {
+        qDebug() << "Empty PDF content for document ID:" << documentId;
+        return createCorsResponse("PDF content not available", QHttpServerResponse::StatusCode::NotFound);
     }
 
-    if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << "Failed to open file:" << absoluteFilePath;
-        return createCorsResponse("Failed to open PDF file", QHttpServerResponse::StatusCode::InternalServerError);
-    }
-
-    // Read file content
-    QByteArray pdfData = file.readAll();
-    file.close();
-
+    // Decode base64 content
+    QByteArray pdfData = QByteArray::fromBase64(base64Content.toUtf8());
     if (pdfData.isEmpty()) {
-        qDebug() << "Empty file or failed to read:" << absoluteFilePath;
-        return createCorsResponse("Failed to read PDF file", QHttpServerResponse::StatusCode::InternalServerError);
+        qDebug() << "Failed to decode base64 PDF content for document ID:" << documentId;
+        return createCorsResponse("Invalid PDF content", QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     // Create response with PDF content
@@ -548,32 +521,43 @@ QHttpServerResponse ExamsRoutes::viewExam(const QHttpServerRequest &request, con
     headers.append("Content-Length", QString::number(pdfData.size()));
     headers.append("Cache-Control", "public, max-age=3600"); // Cache for 1 hour
 
-    // Add CORS headers if needed
+    // Add CORS headers
     headers.append("Access-Control-Allow-Origin", "*");
     headers.append("Access-Control-Allow-Methods", "GET, OPTIONS");
     headers.append("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     response.setHeaders(headers);
 
-    // Optional: Update download/view count
+    // Update view count
     QSqlQuery updateQuery(db);
     updateQuery.prepare("UPDATE documents SET totalviews = totalviews + 1 WHERE id = ?");
     updateQuery.addBindValue(documentId);
     updateQuery.exec(); // Don't fail if this doesn't work
 
-    qDebug() << "PDF served successfully:" << absoluteFilePath << "Size:" << pdfData.size() << "bytes";
+    qDebug() << "PDF served successfully from database. Document ID:" << documentId << "Size:" << pdfData.size() << "bytes";
 
     return response;
 }
 
-// EXTRA FUNCTIONS TO CALCULATE THINGS FOR THE UPLOAD GET AND GET EXAM/S FUNCTIONS
-QJsonArray ExamsRoutes::parseStringToJsonArray(const QString &str)
-{
+// HELPER FUNCTIONS
+QJsonArray ExamsRoutes::parseStringToJsonArray(const QString &str) {
     if (str.isEmpty()) {
         return QJsonArray();
     }
 
-    QJsonDocument doc = QJsonDocument::fromJson(str.toUtf8());
+    QString trimmedStr = str.trimmed();
+    if (!trimmedStr.startsWith("[") || !trimmedStr.endsWith("]")) {
+        return QJsonArray();
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(trimmedStr.toUtf8(), &parseError);
+
+    if (parseError.error != QJsonParseError::NoError) {
+        qDebug() << "JSON parse error:" << parseError.errorString() << "for string:" << str;
+        return QJsonArray();
+    }
+
     if (doc.isArray()) {
         return doc.array();
     }
@@ -581,15 +565,14 @@ QJsonArray ExamsRoutes::parseStringToJsonArray(const QString &str)
     return QJsonArray();
 }
 
-QString ExamsRoutes::calculateFileHash(const QByteArray &data)
-{
+QString ExamsRoutes::calculateFileHash(const QByteArray &data) {
     return QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex();
 }
 
-int ExamsRoutes::estimatePDFPageCount(const QByteArray &pdfData)
-{
+int ExamsRoutes::estimatePDFPageCount(const QByteArray &pdfData) {
     // Simple heuristic: count "/Page" occurrences in PDF
     // In production, use a proper PDF library like Poppler-Qt5
     QString pdfString = QString::fromLatin1(pdfData);
-    return pdfString.count("/Page");
+    int pageCount = pdfString.count("/Page");
+    return pageCount > 0 ? pageCount : 1; // At least 1 page
 }
