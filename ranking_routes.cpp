@@ -1,30 +1,36 @@
 #include "ranking_routes.h"
-#include "response_utils.h"
-#include "jwt_helper.h"
-#include <QSqlDatabase>
-#include <QSqlQuery>
-#include <QSqlError>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 #include <QDateTime>
 #include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QUrlQuery>
+#include "jwt_helper.h"
+#include "response_utils.h"
 
-void RankingRoutes::setupRoutes(QHttpServer* server) {
+void RankingRoutes::setupRoutes(QHttpServer *server)
+{
     // CORS preflight OPTIONS
-    server->route("/leaderboard", QHttpServerRequest::Method::Options, [](const QHttpServerRequest &req) {
-        Q_UNUSED(req)
-        return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
-    });
+    server->route("/leaderboard",
+                  QHttpServerRequest::Method::Options,
+                  [](const QHttpServerRequest &req) {
+                      Q_UNUSED(req)
+                      return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
+                  });
+
 
     // GET /leaderboard
-    server->route("/leaderboard", QHttpServerRequest::Method::Get, [](const QHttpServerRequest &req) {
-        return RankingRoutes::getLeaderboard(req);
-    });
+    server->route("/leaderboard",
+         QHttpServerRequest::Method::Get, [](const QHttpServerRequest &req) {
+                return RankingRoutes::getLeaderboard(req);
+            });
 }
 
-QHttpServerResponse RankingRoutes::getLeaderboard(const QHttpServerRequest &req) {
+QHttpServerResponse RankingRoutes::getLeaderboard(const QHttpServerRequest &req)
+{
     // Extract and validate JWT token
     QString authHeader = req.value("Authorization");
     if (authHeader.isEmpty()) {
@@ -67,30 +73,34 @@ QHttpServerResponse RankingRoutes::getLeaderboard(const QHttpServerRequest &req)
 
     if (timeframe == "weekly") {
         whereClause = "WHERE lastLoginDate >= datetime('now', '-7 days')";
-        pointsCalculation = "(SELECT COALESCE(SUM(xp_earned), 0) FROM user_activity_log WHERE user_id = u.id AND created_at >= datetime('now', '-7 days'))";
+        pointsCalculation = "(SELECT COALESCE(SUM(xp_earned), 0) FROM user_activity_log WHERE "
+                            "user_id = u.id AND created_at >= datetime('now', '-7 days'))";
     } else if (timeframe == "monthly") {
         whereClause = "WHERE lastLoginDate >= datetime('now', '-30 days')";
-        pointsCalculation = "(SELECT COALESCE(SUM(xp_earned), 0) FROM user_activity_log WHERE user_id = u.id AND created_at >= datetime('now', '-30 days'))";
+        pointsCalculation = "(SELECT COALESCE(SUM(xp_earned), 0) FROM user_activity_log WHERE "
+                            "user_id = u.id AND created_at >= datetime('now', '-30 days'))";
     }
 
     // Main leaderboard query
-    QString queryStr = QString(
-                           "SELECT u.id, u.username, u.coinBalance, u.level, u.xpPoints, u.totalProblemsCompleted, "
-                           "u.streak, u.joinDate, u.lastLoginDate, "
-                           "%1 as calculatedPoints, "
-                           "(SELECT COUNT(*) FROM user_activity_log WHERE user_id = u.id AND activity_type = 'forum_post') as forumContributions "
-                           "FROM users u "
-                           "%2 "
-                           "ORDER BY calculatedPoints DESC, u.totalProblemsCompleted DESC "
-                           "LIMIT ?"
-                           ).arg(pointsCalculation, whereClause);
+    QString queryStr = QString("SELECT u.id, u.username, u.coinBalance, u.level, u.xpPoints, "
+                               "u.totalProblemsCompleted, "
+                               "u.streak, u.joinDate, u.lastLoginDate, "
+                               "%1 as calculatedPoints, "
+                               "(SELECT COUNT(*) FROM user_activity_log WHERE user_id = u.id AND "
+                               "activity_type = 'forum_post') as forumContributions "
+                               "FROM users u "
+                               "%2 "
+                               "ORDER BY calculatedPoints DESC, u.totalProblemsCompleted DESC "
+                               "LIMIT ?")
+                           .arg(pointsCalculation, whereClause);
 
     q.prepare(queryStr);
     q.addBindValue(limit);
 
     if (!q.exec()) {
         qDebug() << "Leaderboard query error:" << q.lastError().text();
-        return createCorsResponse("Database error", QHttpServerResponse::StatusCode::InternalServerError);
+        return createCorsResponse("Database error",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     QJsonArray usersArray;
@@ -205,7 +215,8 @@ QHttpServerResponse RankingRoutes::getLeaderboard(const QHttpServerRequest &req)
     }
 
     // Weekly growth calculation (simplified)
-    statsQuery.exec("SELECT COUNT(*) as newUsers FROM users WHERE joinDate >= datetime('now', '-7 days')");
+    statsQuery.exec(
+        "SELECT COUNT(*) as newUsers FROM users WHERE joinDate >= datetime('now', '-7 days')");
     int newUsersThisWeek = 0;
     if (statsQuery.next()) {
         newUsersThisWeek = statsQuery.value("newUsers").toInt();
@@ -214,10 +225,9 @@ QHttpServerResponse RankingRoutes::getLeaderboard(const QHttpServerRequest &req)
 
     // If current user is not in top results, get their rank
     if (currentUserRank == 0 && currentUserId > 0) {
-        QString rankQuery = QString(
-                                "SELECT COUNT(*) + 1 as userRank FROM users u2 "
-                                "WHERE (%1) > (SELECT %1 FROM users WHERE id = ?)"
-                                ).arg(pointsCalculation);
+        QString rankQuery = QString("SELECT COUNT(*) + 1 as userRank FROM users u2 "
+                                    "WHERE (%1) > (SELECT %1 FROM users WHERE id = ?)")
+                                .arg(pointsCalculation);
 
         QSqlQuery userRankQuery(db);
         userRankQuery.prepare(rankQuery);

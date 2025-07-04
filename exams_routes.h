@@ -1,35 +1,36 @@
 #ifndef EXAMS_ROUTES_H
 #define EXAMS_ROUTES_H
 
+#include <QBuffer>
+#include <QByteArray>
+#include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDateTime>
+#include <QDebug>
+#include <QDir>
+#include <QFileInfo>
 #include <QHttpServer>
 #include <QHttpServerRequest>
 #include <QHttpServerResponse>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QSql>
-#include <QSqlDatabase>
-#include "response_utils.h"
-#include <QSqlQuery>
-#include <QJsonArray>
-#include "jwt_helper.h"
-#include <QSqlError>
-#include <QDateTime>
-#include <QDebug>
-#include <QBuffer>
-#include <QByteArray>
-#include <QFileInfo>
 #include <QMimeDatabase>
 #include <QMimeType>
+#include <QSql>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QUuid>
-#include <QCryptographicHash>
 #include <QVariant>
-#include <QCoreApplication>
-#include <QDir>
+#include "jwt_helper.h"
+#include "response_utils.h"
 
-
-class ExamsRoutes {
+class ExamsRoutes
+{
 public:
-    static void setupRoutes(QHttpServer* server);
+    static void setupRoutes(QHttpServer *server);
+
 private:
     static QHttpServerResponse getExams(const QHttpServerRequest &request);
     static QHttpServerResponse getExam(const QHttpServerRequest &request, const QString &id);

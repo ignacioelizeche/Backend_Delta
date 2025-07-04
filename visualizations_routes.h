@@ -8,9 +8,10 @@
 #include <QJsonObject>
 #include "response_utils.h"
 
-class VisualizationsRoutes {
+class VisualizationsRoutes
+{
 public:
-    static void setupRoutes(QHttpServer* server);
+    static void setupRoutes(QHttpServer *server);
 
 private:
     // GET /visualizations

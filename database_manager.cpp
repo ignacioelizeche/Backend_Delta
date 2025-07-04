@@ -29,7 +29,8 @@ database_manager::database_manager()
                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                "username TEXT UNIQUE, "
                "email TEXT UNIQUE, "
-               "password TEXT, "
+               "password TEXT NOT NULL, "
+               "salt TEXT NOT NULL,"
                "role TEXT DEFAULT 'student', "
                "coinBalance INTEGER DEFAULT 0, "
                "xpPoints INTEGER DEFAULT 0, "
@@ -110,7 +111,6 @@ database_manager::database_manager()
     }
 
     // Drop and recreate documents table
-    query.exec("DROP TABLE IF EXISTS documents");
     query.exec("CREATE TABLE IF NOT EXISTS documents ("
                "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                "title TEXT NOT NULL,"

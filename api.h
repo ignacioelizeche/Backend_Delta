@@ -1,11 +1,12 @@
 #ifndef API_H
 #define API_H
 
-#include <QObject>
 #include <QHttpServer>
+#include <QObject>
 #include <QTcpServer>
 
-class API : public QObject {
+class API : public QObject
+{
     Q_OBJECT
 public:
     explicit API(QObject *parent = nullptr);

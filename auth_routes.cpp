@@ -52,22 +52,33 @@ QHttpServerResponse AuthRoutes::registerUser(const QHttpServerRequest &req) {
         return createCorsResponse("Username, email and password required", QHttpServerResponse::StatusCode::BadRequest);
     }
 
+    // Validar formato del email
+    if (!isValidEmail(email)) {
+        return createCorsResponse("Invalid email format", QHttpServerResponse::StatusCode::BadRequest);
+    }
+
+    // Generar salt y hash de la contraseña
+    QString salt = generateSalt();
+    QString hashedPassword = hashPassword(password, salt);
+
     QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery q(db);
 
-    q.prepare("INSERT INTO users (username, email, password, role, coinBalance, xpPoints, level, streak, totalProblemsCompleted, lastLoginDate, joinDate) "
-              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    q.addBindValue(username);
-    q.addBindValue(email);
-    q.addBindValue(password);
-    q.addBindValue(role);
-    q.addBindValue(500);
-    q.addBindValue(0);
-    q.addBindValue(1);
-    q.addBindValue(0);
-    q.addBindValue(0);
-    q.addBindValue(time);
-    q.addBindValue(time);
+    // CORREGIDO: Agregar 'salt' en la lista de columnas (12 columnas, 12 placeholders)
+    q.prepare("INSERT INTO users (username, email, password, salt, role, coinBalance, xpPoints, level, streak, totalProblemsCompleted, lastLoginDate, joinDate) "
+              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    q.addBindValue(username);           // 1
+    q.addBindValue(email);              // 2
+    q.addBindValue(hashedPassword);     // 3
+    q.addBindValue(salt);               // 4 - NUEVO
+    q.addBindValue(role);               // 5
+    q.addBindValue(500);                // 6
+    q.addBindValue(0);                  // 7
+    q.addBindValue(1);                  // 8
+    q.addBindValue(0);                  // 9
+    q.addBindValue(0);                  // 10
+    q.addBindValue(time);               // 11
+    q.addBindValue(time);               // 12
 
     if (!q.exec()) {
         qDebug() << "Insert error:" << q.lastError().text();
@@ -88,7 +99,6 @@ QHttpServerResponse AuthRoutes::login(const QHttpServerRequest &req) {
     auto json = QJsonDocument::fromJson(req.body()).object();
     QString email = json["email"].toString();
     QString password = json["password"].toString();
-    qDebug() << "authorization:" << email << " " << password;
 
     if (email.isEmpty() || password.isEmpty()) {
         return createCorsResponse("Email and password required", QHttpServerResponse::StatusCode::BadRequest);
@@ -97,10 +107,10 @@ QHttpServerResponse AuthRoutes::login(const QHttpServerRequest &req) {
     QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery q(db);
 
-    q.prepare("SELECT id, username, email, role, coinBalance, xpPoints, level, streak, totalProblemsCompleted, lastLoginDate, joinDate "
-              "FROM users WHERE email = ? AND password = ?");
+    // CORREGIDO: Agregar 'salt' en el SELECT
+    q.prepare("SELECT id, username, email, password, salt, role, coinBalance, xpPoints, level, streak, totalProblemsCompleted, lastLoginDate, joinDate "
+              "FROM users WHERE email = ?");
     q.addBindValue(email);
-    q.addBindValue(password);
 
     if (!q.exec()) {
         qDebug() << "Query error:" << q.lastError().text();
@@ -108,6 +118,18 @@ QHttpServerResponse AuthRoutes::login(const QHttpServerRequest &req) {
     }
 
     if (q.next()) {
+        QString storedHash = q.value("password").toString();
+        QString salt = q.value("salt").toString();
+
+        // Verificar la contraseña
+        if (!verifyPassword(password, storedHash, salt)) {
+            QJsonObject errorJson;
+            errorJson["message"] = "Invalid credentials";
+            errorJson["success"] = false;
+            return createCorsResponse(errorJson, QHttpServerResponse::StatusCode::Unauthorized);
+        }
+
+        // Resto del código permanece igual...
         int userId = q.value("id").toInt();
         QString username = q.value("username").toString();
         QString userEmail = q.value("email").toString();
@@ -120,18 +142,12 @@ QHttpServerResponse AuthRoutes::login(const QHttpServerRequest &req) {
         QDateTime previousLastLogin = q.value("lastLoginDate").toDateTime();
         QDateTime joinDate = q.value("joinDate").toDateTime();
 
-        qDebug() << "Previous last login:" << previousLastLogin.toString();
-
+        // Actualizar última fecha de login
         QSqlQuery updateQuery(db);
         updateQuery.prepare("UPDATE users SET lastLoginDate = ? WHERE id = ?");
         updateQuery.addBindValue(QDateTime::currentDateTime());
         updateQuery.addBindValue(userId);
-
-        if (!updateQuery.exec()) {
-            qDebug() << "Update query error:" << updateQuery.lastError().text();
-        } else {
-            qDebug() << "Last login date updated successfully for user:" << userId;
-        }
+        updateQuery.exec();
 
         QString token = jwt_helper::generateJWT(userId, userEmail, role);
 

@@ -2,7 +2,9 @@
 #include <QHttpHeaders>
 
 // Definición de la función para QString
-QHttpServerResponse createCorsResponse(const QString &content, QHttpServerResponse::StatusCode status) {
+QHttpServerResponse createCorsResponse(const QString &content,
+                                       QHttpServerResponse::StatusCode status)
+{
     QHttpServerResponse response(content, status);
 
     QHttpHeaders headers;
@@ -16,7 +18,9 @@ QHttpServerResponse createCorsResponse(const QString &content, QHttpServerRespon
 }
 
 // Definición de la función para QJsonObject
-QHttpServerResponse createCorsResponse(const QJsonObject &content, QHttpServerResponse::StatusCode status) {
+QHttpServerResponse createCorsResponse(const QJsonObject &content,
+                                       QHttpServerResponse::StatusCode status)
+{
     QHttpServerResponse response(content, status);
 
     QHttpHeaders headers;

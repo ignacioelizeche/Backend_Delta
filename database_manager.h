@@ -17,7 +17,6 @@ private:
 
     QSqlDatabase m_db;
 
-
     void createProblemAttemptsTable();
 
     // Prevent copies

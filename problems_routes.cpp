@@ -12,9 +12,7 @@ void ProblemsRoutes::setupRoutes(QHttpServer *server)
     // GET /problems - get all problems
     server->route("/problems/difficulty/undefined/undefined",
                   QHttpServerRequest::Method::Get,
-                  [](const QHttpServerRequest &req) {
-                      return ProblemsRoutes::getAllProblems(req);
-                  });
+                  [](const QHttpServerRequest &req) { return ProblemsRoutes::getAllProblems(req); });
     // GET /problems/difficulty/{Difficulty}/{topic}
     server->route("/problems/difficulty/<arg>/<arg>",
                   QHttpServerRequest::Method::Options,
@@ -86,14 +84,14 @@ void ProblemsRoutes::setupRoutes(QHttpServer *server)
                       Q_UNUSED(req)
                       return createCorsResponse("", QHttpServerResponse::StatusCode::Ok);
                   });
-    server->route("/problems",
-                  QHttpServerRequest::Method::Post,
-                  [](const QHttpServerRequest &req) {
-                      return ProblemsRoutes::createProblem(req);
-                  });
+    server->route("/problems", QHttpServerRequest::Method::Post, [](const QHttpServerRequest &req) {
+        return ProblemsRoutes::createProblem(req);
+    });
 }
 
-QHttpServerResponse ProblemsRoutes::getProblems(const QString &difficulty, const QString &topic, const QHttpServerRequest &request)
+QHttpServerResponse ProblemsRoutes::getProblems(const QString &difficulty,
+                                                const QString &topic,
+                                                const QHttpServerRequest &request)
 {
     QString authHeader = request.value("Authorization");
     if (authHeader.isEmpty()) {
@@ -126,7 +124,7 @@ QHttpServerResponse ProblemsRoutes::getProblems(const QString &difficulty, const
     if (!q.exec()) {
         qDebug() << "Query error:" << q.lastError().text();
         return createCorsResponse("Database error",
-                                                 QHttpServerResponse::StatusCode::InternalServerError);
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     QJsonArray problemsArr;
@@ -205,7 +203,7 @@ QHttpServerResponse ProblemsRoutes::getProblem(const QHttpServerRequest &request
     if (!q.exec()) {
         qDebug() << "Query error:" << q.lastError().text();
         return createCorsResponse("Database error",
-                                                 QHttpServerResponse::StatusCode::InternalServerError);
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     if (!q.next()) {
@@ -253,7 +251,8 @@ QHttpServerResponse ProblemsRoutes::getProblem(const QHttpServerRequest &request
 }
 
 // In your problems_routes.cpp file
-QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &request, const QString &id)
+QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &request,
+                                                  const QString &id)
 {
     // Authorization code
     QString authHeader = request.value("Authorization");
@@ -293,13 +292,15 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
     // Start transaction for data consistency
     if (!db.transaction()) {
         qDebug() << "Failed to start transaction:" << db.lastError().text();
-        return createCorsResponse("Database error", QHttpServerResponse::StatusCode::InternalServerError);
+        return createCorsResponse("Database error",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     // Get problem details first
     QSqlQuery problemQuery(db);
-    problemQuery.prepare("SELECT title, difficulty, xpValue, pointValue, correctAnswer, explanation, topic "
-                         "FROM problems WHERE id = ?");
+    problemQuery.prepare(
+        "SELECT title, difficulty, xpValue, pointValue, correctAnswer, explanation, topic "
+        "FROM problems WHERE id = ?");
     problemQuery.addBindValue(id.toInt());
 
     if (!problemQuery.exec() || !problemQuery.next()) {
@@ -338,8 +339,9 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
     int newLevel = 0;
     if (isCorrect) {
         QSqlQuery updateUserQuery(db);
-        updateUserQuery.prepare("UPDATE users SET xpPoints = xpPoints + ?, coinBalance = coinBalance + ?, "
-                                "totalProblemsCompleted = totalProblemsCompleted + 1 WHERE id = ?");
+        updateUserQuery.prepare(
+            "UPDATE users SET xpPoints = xpPoints + ?, coinBalance = coinBalance + ?, "
+            "totalProblemsCompleted = totalProblemsCompleted + 1 WHERE id = ?");
         updateUserQuery.addBindValue(xpEarned);
         updateUserQuery.addBindValue(coinsEarned);
         updateUserQuery.addBindValue(userId);
@@ -374,15 +376,17 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
     if (!db.commit()) {
         qDebug() << "Failed to commit transaction:" << db.lastError().text();
         db.rollback();
-        return createCorsResponse("Database error", QHttpServerResponse::StatusCode::InternalServerError);
+        return createCorsResponse("Database error",
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     // Check for achievements (simplified example)
     QJsonArray achievements;
     if (isCorrect) {
         QSqlQuery achievementQuery(db);
-        achievementQuery.prepare("SELECT COUNT(*) FROM problem_attempts WHERE userId = ? AND correct = 1 "
-                                 "AND problemId IN (SELECT id FROM problems WHERE topic = ?)");
+        achievementQuery.prepare(
+            "SELECT COUNT(*) FROM problem_attempts WHERE userId = ? AND correct = 1 "
+            "AND problemId IN (SELECT id FROM problems WHERE topic = ?)");
         achievementQuery.addBindValue(userId);
         QString topic = problemQuery.value("topic").toString();
         achievementQuery.addBindValue(topic);
@@ -425,7 +429,8 @@ QHttpServerResponse ProblemsRoutes::submitProblem(const QHttpServerRequest &requ
     return createCorsResponse(responseJson, QHttpServerResponse::StatusCode::Ok);
 }
 
-QHttpServerResponse ProblemsRoutes::getProblemAttempts(const QHttpServerRequest &request, const QString &problemId)
+QHttpServerResponse ProblemsRoutes::getProblemAttempts(const QHttpServerRequest &request,
+                                                       const QString &problemId)
 {
     QString authHeader = request.value("Authorization");
     if (authHeader.isEmpty()) {
@@ -463,7 +468,7 @@ QHttpServerResponse ProblemsRoutes::getProblemAttempts(const QHttpServerRequest 
     if (!q.exec()) {
         qDebug() << "Query error:" << q.lastError().text();
         return createCorsResponse("Database error",
-                                                 QHttpServerResponse::StatusCode::InternalServerError);
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     QJsonArray attemptsArr;
@@ -486,7 +491,8 @@ QHttpServerResponse ProblemsRoutes::getProblemAttempts(const QHttpServerRequest 
     return createCorsResponse(responseJson.toJson(), QHttpServerResponse::StatusCode::Ok);
 }
 
-QHttpServerResponse ProblemsRoutes::getRecommendations(const QHttpServerRequest &request, const QString &targetUserId)
+QHttpServerResponse ProblemsRoutes::getRecommendations(const QHttpServerRequest &request,
+                                                       const QString &targetUserId)
 {
     QString authHeader = request.value("Authorization");
     if (authHeader.isEmpty()) {
@@ -511,18 +517,19 @@ QHttpServerResponse ProblemsRoutes::getRecommendations(const QHttpServerRequest 
     // Simple recommendation logic: get problems not yet attempted by the user
     QSqlDatabase db = QSqlDatabase::database();
     QSqlQuery q(db);
-    q.prepare("SELECT p.id, p.title, p.difficulty, p.topic, p.pointValue, p.xpValue, p.estimatedTime "
-              "FROM problems p "
-              "LEFT JOIN problem_attempts pa ON p.id = pa.problemId AND pa.userId = ? "
-              "WHERE pa.id IS NULL "
-              "ORDER BY p.difficulty, p.xpValue DESC "
-              "LIMIT 10");
+    q.prepare(
+        "SELECT p.id, p.title, p.difficulty, p.topic, p.pointValue, p.xpValue, p.estimatedTime "
+        "FROM problems p "
+        "LEFT JOIN problem_attempts pa ON p.id = pa.problemId AND pa.userId = ? "
+        "WHERE pa.id IS NULL "
+        "ORDER BY p.difficulty, p.xpValue DESC "
+        "LIMIT 10");
     q.addBindValue(targetUserId);
 
     if (!q.exec()) {
         qDebug() << "Query error:" << q.lastError().text();
         return createCorsResponse("Database error",
-                                                 QHttpServerResponse::StatusCode::InternalServerError);
+                                  QHttpServerResponse::StatusCode::InternalServerError);
     }
 
     QJsonArray recommendationsArr;
@@ -572,13 +579,15 @@ QHttpServerResponse ProblemsRoutes::createProblem(const QHttpServerRequest &requ
     // Parse and validate input JSON
     QJsonDocument jsonDoc = QJsonDocument::fromJson(request.body());
     if (jsonDoc.isNull() || !jsonDoc.isObject()) {
-        return createCorsResponse("Invalid JSON format", QHttpServerResponse::StatusCode::BadRequest);
+        return createCorsResponse("Invalid JSON format",
+                                  QHttpServerResponse::StatusCode::BadRequest);
     }
 
     QJsonObject json = jsonDoc.object();
 
     // Required fields validation
-    QStringList requiredFields = {"title", "description", "difficulty", "topic", "correctAnswer", "type"};
+    QStringList requiredFields
+        = {"title", "description", "difficulty", "topic", "correctAnswer", "type"};
     for (const QString &field : requiredFields) {
         if (!json.contains(field) || json[field].toString().trimmed().isEmpty()) {
             return createCorsResponse(QString("Field '%1' is required").arg(field),
@@ -604,16 +613,19 @@ QHttpServerResponse ProblemsRoutes::createProblem(const QHttpServerRequest &requ
     // Validate type
     QStringList validTypes = {"multiple_choice", "short_answer", "essay", "code", "true_false"};
     if (!validTypes.contains(type)) {
-        return createCorsResponse("Invalid type. Must be: multiple_choice, short_answer, essay, code, or true_false",
-                                  QHttpServerResponse::StatusCode::BadRequest);
+        return createCorsResponse(
+            "Invalid type. Must be: multiple_choice, short_answer, essay, code, or true_false",
+            QHttpServerResponse::StatusCode::BadRequest);
     }
 
     // Optional fields with defaults
     int pointValue = json.contains("pointValue") ? json["pointValue"].toInt() : 10;
     int xpValue = json.contains("xpValue") ? json["xpValue"].toInt() : 5;
-    int estimatedTime = json.contains("estimatedTime") ? json["estimatedTime"].toInt() : 5; // minutes
+    int estimatedTime = json.contains("estimatedTime") ? json["estimatedTime"].toInt()
+                                                       : 5;                      // minutes
     int timeLimit = json.contains("timeLimit") ? json["timeLimit"].toInt() : 30; // minutes
-    QString explanation = json.contains("explanation") ? json["explanation"].toString().trimmed() : "";
+    QString explanation = json.contains("explanation") ? json["explanation"].toString().trimmed()
+                                                       : "";
 
     // Validate numeric values
     if (pointValue < 1 || pointValue > 1000) {
@@ -674,10 +686,11 @@ QHttpServerResponse ProblemsRoutes::createProblem(const QHttpServerRequest &requ
     QSqlQuery insertQuery(db);
 
     // SIMPLIFIED INSERT - only include fields that definitely exist
-    insertQuery.prepare("INSERT INTO problems (title, description, difficulty, topic, pointValue, "
-                        "xpValue, explanation, estimatedTime, tags, concepts, type, timeLimit, correctAnswer, "
-                        "createdAt) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    insertQuery.prepare(
+        "INSERT INTO problems (title, description, difficulty, topic, pointValue, "
+        "xpValue, explanation, estimatedTime, tags, concepts, type, timeLimit, correctAnswer, "
+        "createdAt) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     insertQuery.addBindValue(title);
     insertQuery.addBindValue(description);
@@ -826,3 +839,6 @@ QHttpServerResponse ProblemsRoutes::getAllProblems(const QHttpServerRequest &req
     QJsonDocument responseJson(problemsArr);
     return createCorsResponse(responseJson.toJson(), QHttpServerResponse::StatusCode::Ok);
 }
+
+
+

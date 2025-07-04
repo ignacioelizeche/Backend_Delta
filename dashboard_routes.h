@@ -8,9 +8,10 @@
 #include <QJsonObject>
 #include "response_utils.h"
 
-class DashboardRoutes {
+class DashboardRoutes
+{
 public:
-    static void setupRoutes(QHttpServer* server);
+    static void setupRoutes(QHttpServer *server);
 
 private:
     // GET /dashboard/stats
